@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "FaceID Davomat",
+    "slug": "faceid-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "faceid",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "backgroundColor": "#FAFAFA",
+    "splash": {
+      "backgroundColor": "#4F46E5",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "net.atssystems.faceid",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Davomatni selfie orqali tasdiqlash uchun kamera kerak.",
+        "NSLocationWhenInUseUsageDescription": "Filial hududida ekaningizni tekshirish uchun joylashuv kerak."
+      }
+    },
+    "android": {
+      "package": "net.atssystems.faceid",
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      "expo-secure-store",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Davomatni selfie orqali tasdiqlash uchun kamera kerak."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Filial hududida ekaningizni tekshirish uchun joylashuv kerak."
+        }
+      ],
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
