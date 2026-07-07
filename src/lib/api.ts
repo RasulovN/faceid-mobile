@@ -5,9 +5,18 @@ import type { RefreshResponse } from '@/types/api';
 const ACCESS_KEY = 'faceid_access_token';
 const REFRESH_KEY = 'faceid_refresh_token';
 
-export const API_URL: string = (
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1'
-).replace(/\/+$/, '');
+/**
+ * EXPO_PUBLIC_API_URL faqat domen bo'lsa (masalan http://192.168.1.42:3000)
+ * oxiriga /api/v1 avtomatik qo'shiladi; to'liq berilsa o'zgarishsiz qoladi.
+ */
+function normalizeApiUrl(raw: string): string {
+  const base = raw.trim().replace(/\/+$/, '');
+  return /\/api\/v\d+$/.test(base) ? base : `${base}/api/v1`;
+}
+
+export const API_URL: string = normalizeApiUrl(
+  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000',
+);
 
 // ---------------------------------------------------------------------------
 // Envelope & xatolar
