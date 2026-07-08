@@ -49,6 +49,15 @@ export function getLocale(): Locale {
   return currentLocale;
 }
 
+// Global `currentLocale` ni settings store bilan sinxron ushlaymiz.
+// Subscription ham foydalanuvchi tanlovини (setLocale), ham AsyncStorage'dan
+// rehydrate bo'lishni qamrab oladi — settings.ts endi i18n'ni import qilmaydi
+// (require cycle yo'q).
+currentLocale = useSettingsStore.getState().locale;
+useSettingsStore.subscribe((s) => {
+  currentLocale = s.locale;
+});
+
 /**
  * Global (non-reaktiv) tarjima funksiyasi — FAQAT React komponentidan tashqarida
  * ishlating (masalan `src/lib/errors.ts`, `src/lib/api.ts`, `src/lib/format.ts`).

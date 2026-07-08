@@ -13,7 +13,11 @@ export function checkErrorMessage(err: unknown): string {
           : t('errOutOfGeofenceNoDist');
       }
       case 'LIVENESS_FAILED':
-        return t('errLiveness');
+        return t('errLivenessSpoof');
+      case 'CHALLENGE_FAILED':
+        return t('errChallengeFailed');
+      case 'FACE_NOT_DETECTED':
+        return t('errFaceNotDetected');
       case 'FACE_NOT_RECOGNIZED':
         return t('errFaceNotRecognized');
       case 'FACE_NOT_FOUND':

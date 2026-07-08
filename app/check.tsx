@@ -33,6 +33,25 @@ import { useAuthStore } from '@/store/auth';
 import { useSettingsStore } from '@/store/settings';
 import { type ColorScheme, fonts, radius, useTheme } from '@/theme';
 import type { AttendanceType, MobileCheckResponse } from '@/types/api';
+import type { LiveFaceCameraProps } from '@/components/LiveFaceCamera';
+import { WsFaceCamera } from '@/components/WsFaceCamera';
+import type { GateStatus } from '@/lib/faceGate';
+import { isVisionCameraAvailable } from '@/lib/visionCamera';
+
+// VisionCamera native moduli BOR buildda — real-vaqt yuz kuzatuvi (on-device
+// ML Kit yuz kvadrati + blink jonlilik darvozasi). Eski dev-client'da null
+// bo'lib qoladi va ekran expo-camera fallback oqimida ishlaydi. Statik import
+// EMAS: native modul yo'q buildda ilova yiqilmasligi uchun runtime require.
+let LiveFaceCamera: React.ComponentType<LiveFaceCameraProps> | null = null;
+try {
+  if (isVisionCameraAvailable()) {
+    LiveFaceCamera = (
+      require('@/components/LiveFaceCamera') as typeof import('@/components/LiveFaceCamera')
+    ).LiveFaceCamera;
+  }
+} catch {
+  LiveFaceCamera = null;
+}
 
 /** Yuqori bosqich holati (geofence/kamera/natija). */
 type Phase = 'locating' | 'far' | 'camera' | 'success' | 'error';
@@ -49,19 +68,32 @@ interface LoopState {
   netFails: number;
   /** Ketma-ket FACE_NOT_RECOGNIZED soni — boshqa odam yuzини aniqlash uchun. */
   notRecognizedStreak: number;
+  /** Ketma-ket LIVENESS_FAILED soni — rasm/ekran (spoof) urinishini aniqlash uchun. */
+  livenessStreak: number;
   /** Oxirgi urinishning xato kodi (timeout xabarини tanlash uchun). */
   lastCode: string;
   startedAt: number;
 }
 
 // --- Sikl parametrlari ---
-const MAX_ATTEMPTS = 15;
-const MAX_DURATION_MS = 30_000;
-const SCAN_INTERVAL_MS = 1500; // urinishlar orasidagi asosiy interval
-const RETRY_HINT_MS = 800; // amber "retry" hint ko'rsatilish muddati
+// Har bir urinish endi BURST: bir necha kadr ketma-ket olinib bitta so'rovda
+// yuboriladi — server jonlilikni (passiv anti-spoof + bosh burilishi) shu
+// ketma-ketlik bo'yicha tekshiradi. Shu sabab urinish soni kam, vaqt ko'proq.
+const BURST_FRAMES = 4; // bitta urinishdagi kadrlar soni
+const BURST_FRAME_GAP_MS = 550; // kadrlar orasidagi pauza (bosh burilishga ulgursin)
+const MAX_ATTEMPTS = 6;
+const MAX_DURATION_MS = 60_000;
+const SCAN_INTERVAL_MS = 1000; // urinishlar orasidagi asosiy interval
+const RETRY_HINT_MS = 900; // amber "retry" hint ko'rsatilish muddati
 const NETWORK_FAIL_LIMIT = 3; // ketma-ket tarmoq xatosi → terminal
-const TIP_AFTER_ATTEMPTS = 5; // shundan keyin yorug'lik maslahati
-const NOT_RECOGNIZED_STREAK_LIMIT = 5; // ketma-ket "boshqa odam" → terminal
+const TIP_AFTER_ATTEMPTS = 3; // shundan keyin yorug'lik maslahati
+const NOT_RECOGNIZED_STREAK_LIMIT = 3; // ketma-ket "boshqa odam" → terminal
+const LIVENESS_STREAK_LIMIT = 3; // ketma-ket spoof gumoni → terminal
+
+/** Kadrlar orasidagi kutish. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** Locale'ni TTS til kodiga moslaydi (uz-Cyrl uchun 'uz' fallback). */
 function speechLang(locale: Locale): string {
@@ -111,6 +143,12 @@ export default function CheckScreen(): React.ReactElement {
   const [farDistance, setFarDistance] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successTime, setSuccessTime] = useState<string>('');
+  // Rejimlar: live (on-device ML Kit) > ws (server-driven real-time) > legacy.
+  const liveMode = LiveFaceCamera !== null;
+  const [wsFailed, setWsFailed] = useState(false);
+  const legacyMode = !liveMode && wsFailed;
+  const [gateStatus, setGateStatus] = useState<string>(liveMode ? 'no_face' : 'connecting');
+  const [liveBusy, setLiveBusy] = useState(false);
 
   // --- Sikl uchun ref'lar (stale closure'siz, re-render'siz o'qish) ---
   const phaseRef = useRef<Phase>('locating');
@@ -122,6 +160,7 @@ export default function CheckScreen(): React.ReactElement {
     attempts: 0,
     netFails: 0,
     notRecognizedStreak: 0,
+    livenessStreak: 0,
     lastCode: '',
     startedAt: 0,
   });
@@ -179,71 +218,46 @@ export default function CheckScreen(): React.ReactElement {
   }, []);
 
   /**
-   * Bitta urinish: kadr oladi → multipart yuboradi → natijani tasniflaydi.
-   * In-flight lock (loop.inFlight) tufayli bir vaqtда faqat bitta so'rov ketadi.
+   * Urinish/vaqt limitlarini tekshiradi; oshgan bo'lsa terminal holatga
+   * o'tkazib true qaytaradi (legacy tick ham, live burst ham ishlatadi).
    */
-  const runTick = useCallback(async () => {
+  const enforceLimits = useCallback((): boolean => {
     const loop = loopRef.current;
     const tt = tRef.current;
-    if (loop.cancelled || phaseRef.current !== 'camera') return;
-    if (loop.inFlight) return;
-
-    // Limit: urinishlar soni yoki umumiy vaqt oshsa → terminal timeout
-    if (loop.attempts >= MAX_ATTEMPTS || Date.now() - loop.startedAt >= MAX_DURATION_MS) {
-      stopLoop();
-      // Oxirgi sabab "yuz mos emas" bo'lsa aniq xabar + ovoz beramiz.
-      if (loop.lastCode === 'FACE_NOT_RECOGNIZED') {
-        setErrorMessage(tt('faceNotYours'));
-        announce(tt('voiceNotRecognized'), localeRef.current);
-      } else {
-        setErrorMessage(lastHintRef.current || tt('verifyTimeout'));
-      }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setPhaseBoth('error');
-      return;
+    if (loop.attempts < MAX_ATTEMPTS && Date.now() - loop.startedAt < MAX_DURATION_MS) {
+      return false;
     }
-
-    const camera = cameraRef.current;
-    const loc = locationRef.current;
-    if (!camera || !loc) {
-      scheduleRetry();
-      return;
+    stopLoop();
+    // Oxirgi sabab aniq bo'lsa mos xabar + ovoz beramiz.
+    if (loop.lastCode === 'FACE_NOT_RECOGNIZED') {
+      setErrorMessage(tt('faceNotYours'));
+      announce(tt('voiceNotRecognized'), localeRef.current);
+    } else if (loop.lastCode === 'LIVENESS_FAILED') {
+      setErrorMessage(tt('errLivenessSpoof'));
+      announce(tt('voiceLivenessFailed'), localeRef.current);
+    } else {
+      setErrorMessage(lastHintRef.current || tt('verifyTimeout'));
     }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setPhaseBoth('error');
+    return true;
+  }, [stopLoop, setPhaseBoth]);
 
-    loop.inFlight = true;
-    loop.attempts += 1;
-    setScanState('scanning');
-    try {
-      const photo = await camera.takePictureAsync({ quality: 0.5, skipProcessing: true });
-      if (loop.cancelled) return;
-      if (!photo) throw new ApiError('CAPTURE_FAILED', tt('errGeneric'), 0);
-
-      setScanState('verifying');
-      const form = new FormData();
-      form.append('selfie', {
-        uri: photo.uri,
-        name: 'selfie.jpg',
-        type: 'image/jpeg',
-      } as unknown as Blob);
-      form.append('latitude', String(loc.latitude));
-      form.append('longitude', String(loc.longitude));
-      form.append('accuracy', String(loc.accuracy ?? 0));
-      form.append('isMockLocation', String(loc.mocked));
-      form.append('type', typeRef.current);
-
-      const res = await api<MobileCheckResponse>('/attendance/mobile/check', {
-        method: 'POST',
-        formData: form,
-      });
-      if (loop.cancelled) return;
-
-      // --- Muvaffaqiyat: siklni darhol to'xtatamiz ---
+  /**
+   * Muvaffaqiyatli tekshiruv: streak'lar reset, sikl to'xtaydi, success
+   * bosqichi (HTTP burst ham, WS oqimi ham shu yerga keladi).
+   */
+  const handleCheckSuccess = useCallback(
+    async (timestampIso?: string) => {
+      const loop = loopRef.current;
+      const tt = tRef.current;
       loop.netFails = 0;
       loop.notRecognizedStreak = 0;
+      loop.livenessStreak = 0;
       loop.lastCode = '';
       stopLoop();
       setScanState('success');
-      setSuccessTime(fmtTime(res.event?.timestamp ?? new Date().toISOString()));
+      setSuccessTime(fmtTime(timestampIso ?? new Date().toISOString()));
       await queryClient.invalidateQueries({ queryKey: ['attendance'] });
       announce(
         typeRef.current === 'CHECK_IN' ? tt('voiceCheckIn') : tt('voiceCheckOut'),
@@ -251,8 +265,18 @@ export default function CheckScreen(): React.ReactElement {
       );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setPhaseBoth('success');
-    } catch (err) {
-      if (loopRef.current.cancelled) return;
+    },
+    [stopLoop, setPhaseBoth, queryClient],
+  );
+
+  /**
+   * Urinish xatosini tasniflaydi (HTTP burst va WS oqimi uchun UMUMIY):
+   * terminal kodlar → error/far bosqich; transient → hint + davom.
+   */
+  const handleCheckError = useCallback(
+    (err: unknown) => {
+      const loop = loopRef.current;
+      const tt = tRef.current;
       const code = err instanceof ApiError ? err.code : 'UNKNOWN';
 
       // TERMINAL: geofence'dan chiqib ketgan → "far" bosqichi
@@ -294,6 +318,7 @@ export default function CheckScreen(): React.ReactElement {
       if (code === 'NETWORK_ERROR') {
         loop.netFails += 1;
         loop.notRecognizedStreak = 0;
+        loop.livenessStreak = 0;
         loop.lastCode = code;
         if (loop.netFails >= NETWORK_FAIL_LIMIT) {
           stopLoop();
@@ -311,6 +336,7 @@ export default function CheckScreen(): React.ReactElement {
       // Ketma-ket NOT_RECOGNIZED_STREAK_LIMIT marta → boshqa odam → terminal.
       if (code === 'FACE_NOT_RECOGNIZED') {
         loop.netFails = 0;
+        loop.livenessStreak = 0;
         loop.notRecognizedStreak += 1;
         loop.lastCode = code;
         if (loop.notRecognizedStreak >= NOT_RECOGNIZED_STREAK_LIMIT) {
@@ -327,24 +353,230 @@ export default function CheckScreen(): React.ReactElement {
         return;
       }
 
-      // TRANSIENT: LIVENESS_FAILED / FACE_LOW_QUALITY / boshqa — bular yuz mosligini
-      // bildirmaydi → streak reset. Siklда davom etamiz, qisqa hint ko'rsatib.
+      // JONLILIK O'TMADI: rasm/ekran (spoof) gumoni. Ketma-ket
+      // LIVENESS_STREAK_LIMIT marta → terminal (server bu urinishlarni
+      // xavfsizlik hodisasi sifatida audit-log qiladi).
+      if (code === 'LIVENESS_FAILED') {
+        loop.netFails = 0;
+        loop.notRecognizedStreak = 0;
+        loop.livenessStreak += 1;
+        loop.lastCode = code;
+        if (loop.livenessStreak >= LIVENESS_STREAK_LIMIT) {
+          stopLoop();
+          setErrorMessage(tt('errLivenessSpoof'));
+          announce(tt('voiceLivenessFailed'), localeRef.current);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setPhaseBoth('error');
+          return;
+        }
+        lastHintRef.current = tt('errLivenessSpoof');
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        scheduleRetry();
+        return;
+      }
+
+      // TRANSIENT: FACE_NOT_DETECTED (kadrda yuz yo'q — hech narsa yuborilgani
+      // bilan "boshqa odam" EMAS) / CHALLENGE_FAILED (bosh burilmadi) /
+      // FACE_LOW_QUALITY / boshqa — barcha streak'lar reset, sikl davom etadi.
       loop.netFails = 0;
       loop.notRecognizedStreak = 0;
+      loop.livenessStreak = 0;
       loop.lastCode = code;
       lastHintRef.current = code === 'UNKNOWN' ? tt('scanRetry') : checkErrorMessage(err);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       scheduleRetry();
-    } finally {
-      loopRef.current.inFlight = false;
+    },
+    [stopLoop, scheduleRetry, setPhaseBoth],
+  );
+
+  /**
+   * Olingan kadrlarni serverga yuborib natijani tasniflaydi — legacy
+   * (expo-camera burst) va live (on-device darvoza) rejimlar uchun UMUMIY.
+   * Chaqirilishidan OLDIN loop.inFlight=true bo'lishi shart; o'zi reset qiladi.
+   */
+  const submitFrames = useCallback(
+    async (frameUris: string[]) => {
+      const loop = loopRef.current;
+      const loc = locationRef.current;
+      if (loop.cancelled || !loc) {
+        loop.inFlight = false;
+        return;
+      }
+      try {
+        setScanState('verifying');
+        const form = new FormData();
+        frameUris.forEach((uri, i) => {
+          form.append('frames', {
+            uri,
+            name: `frame${i}.jpg`,
+            type: 'image/jpeg',
+          } as unknown as Blob);
+        });
+        form.append('latitude', String(loc.latitude));
+        form.append('longitude', String(loc.longitude));
+        form.append('accuracy', String(loc.accuracy ?? 0));
+        form.append('isMockLocation', String(loc.mocked));
+        form.append('type', typeRef.current);
+
+        const res = await api<MobileCheckResponse>('/attendance/mobile/check', {
+          method: 'POST',
+          formData: form,
+        });
+        if (loop.cancelled) return;
+        await handleCheckSuccess(res.event?.timestamp);
+      } catch (err) {
+        if (loopRef.current.cancelled) return;
+        handleCheckError(err);
+      } finally {
+        loopRef.current.inFlight = false;
+      }
+    },
+    [handleCheckSuccess, handleCheckError],
+  );
+
+  /**
+   * LEGACY (expo-camera) urinish: 4 kadr burst oladi → submitFrames.
+   * Faqat VisionCamera'siz eski buildda ishlaydi; foydalanuvchi bosh burishi
+   * server 'turn' challenge'iga dalil bo'ladi.
+   */
+  const runTick = useCallback(async () => {
+    const loop = loopRef.current;
+    const tt = tRef.current;
+    if (loop.cancelled || phaseRef.current !== 'camera') return;
+    if (loop.inFlight) return;
+    if (enforceLimits()) return;
+
+    const camera = cameraRef.current;
+    if (!camera || !locationRef.current) {
+      scheduleRetry();
+      return;
     }
-  }, [stopLoop, scheduleRetry, setPhaseBoth, queryClient]);
+
+    loop.inFlight = true;
+    loop.attempts += 1;
+    setScanState('scanning');
+    const frameUris: string[] = [];
+    try {
+      for (let i = 0; i < BURST_FRAMES; i += 1) {
+        if (loop.cancelled) {
+          loop.inFlight = false;
+          return;
+        }
+        const photo = await camera.takePictureAsync({
+          quality: 0.5,
+          skipProcessing: true,
+          shutterSound: false,
+        });
+        if (!photo) throw new ApiError('CAPTURE_FAILED', tt('errGeneric'), 0);
+        frameUris.push(photo.uri);
+        if (i < BURST_FRAMES - 1) await delay(BURST_FRAME_GAP_MS);
+      }
+    } catch {
+      loop.inFlight = false;
+      lastHintRef.current = tt('scanRetry');
+      scheduleRetry();
+      return;
+    }
+    await submitFrames(frameUris);
+  }, [enforceLimits, scheduleRetry, submitFrames]);
+
+  /**
+   * LIVE rejim: FaceGate jonlilik dalili (blink/burilish) bilan olingan
+   * kadrlar. Darvoza allaqachon "haqiqiy odam" ekanini tasdiqlagan — server
+   * endi passiv anti-spoof + identity'ni tekshiradi.
+   */
+  const handleLiveBurst = useCallback(
+    (uris: string[]) => {
+      const loop = loopRef.current;
+      if (loop.cancelled || loop.inFlight || phaseRef.current !== 'camera') return;
+      if (enforceLimits()) return;
+      loop.inFlight = true;
+      loop.attempts += 1;
+      setLiveBusy(true);
+      void submitFrames(uris).finally(() => setLiveBusy(false));
+    },
+    [enforceLimits, submitFrames],
+  );
+
+  const handleGateStatus = useCallback((status: GateStatus) => {
+    setGateStatus(status);
+  }, []);
+
+  // --- WS (server-driven real-time) rejim handlerlari ---
+
+  const handleWsStatus = useCallback((state: string) => {
+    setGateStatus(state === 'verifying' ? 'triggered' : state);
+    if (state === 'verifying') {
+      setScanState('verifying');
+    } else {
+      setScanState((s) => (s === 'verifying' ? 'scanning' : s));
+    }
+  }, []);
+
+  const handleWsSuccess = useCallback(
+    (timestampIso?: string) => {
+      if (loopRef.current.cancelled) return;
+      void handleCheckSuccess(timestampIso);
+    },
+    [handleCheckSuccess],
+  );
+
+  const handleWsFailure = useCallback(
+    (err: ApiError, terminal: boolean) => {
+      if (loopRef.current.cancelled) return;
+      if (terminal) {
+        stopLoop();
+        setErrorMessage(checkErrorMessage(err));
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setPhaseBoth('error');
+        return;
+      }
+      loopRef.current.attempts += 1;
+      if (enforceLimits()) return;
+      handleCheckError(err);
+    },
+    [stopLoop, setPhaseBoth, enforceLimits, handleCheckError],
+  );
+
+  const handleWsFatalStart = useCallback(
+    (err: ApiError) => {
+      if (loopRef.current.cancelled) return;
+      const knownTerminal = [
+        'OUT_OF_GEOFENCE',
+        'SUBSCRIPTION_EXPIRED',
+        'MOCK_LOCATION',
+        'FACE_NOT_FOUND',
+        'DEBOUNCE',
+        'UNAUTHORIZED',
+      ];
+      if (knownTerminal.includes(err.code)) {
+        // handleCheckError bu kodlarni to'g'ri terminal bosqichga o'tkazadi
+        handleCheckError(err);
+        return;
+      }
+      stopLoop();
+      setErrorMessage(checkErrorMessage(err));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setPhaseBoth('error');
+    },
+    [handleCheckError, stopLoop, setPhaseBoth],
+  );
+
+  const handleWsUnavailable = useCallback(() => {
+    // WS ulanmadi/uzildi — eski HTTP burst rejimiga tushamiz (bosh burish
+    // challenge bilan); legacy CameraView mount bo'lib siklni qayta boshlaydi.
+    stopLoop();
+    setWsFailed(true);
+  }, [stopLoop]);
 
   useEffect(() => {
     tickRef.current = () => {
+      // Live rejimda darvoza (blink), WS rejimda server sessiyasi boshqaradi —
+      // timer tick faqat legacy oqim uchun.
+      if (!legacyMode) return;
       void runTick();
     };
-  }, [runTick]);
+  }, [runTick, legacyMode]);
 
   /** Kamera tayyor bo'lgach avtomatik siklni boshlaydi (idempotent). */
   const startLoop = useCallback(() => {
@@ -356,17 +588,27 @@ export default function CheckScreen(): React.ReactElement {
     loop.attempts = 0;
     loop.netFails = 0;
     loop.notRecognizedStreak = 0;
+    loop.livenessStreak = 0;
     loop.lastCode = '';
     loop.startedAt = Date.now();
     lastHintRef.current = '';
     setScanState('scanning');
-    tickRef.current();
-  }, []);
+    // Live/WS rejimlarda birinchi urinishni darvoza/server boshlaydi
+    if (legacyMode) tickRef.current();
+  }, [legacyMode]);
 
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
     startLoop();
   }, [startLoop]);
+
+  // Live/WS rejimlarda legacy CameraView yo'q (onCameraReady kelmaydi) —
+  // kamera bosqichiga o'tishning o'zida siklni qurollantiramiz.
+  useEffect(() => {
+    if (!legacyMode && phase === 'camera' && cameraPermission?.granted) {
+      startLoop();
+    }
+  }, [legacyMode, phase, cameraPermission, startLoop]);
 
   /** Qo'lda olish (fallback) — in-flight lock bilan avto-sikl bilan aralashmaydi. */
   const manualCapture = useCallback(() => {
@@ -446,6 +688,30 @@ export default function CheckScreen(): React.ReactElement {
           ? colors.success
           : colors.white;
 
+  // Live/WS rejimlarda 'scanning' paytida darvoza holatiga mos YO'NALTIRUVCHI
+  // matn (yuzni joylashtirish/yaqinlashish/qarab turish); legacy rejimda esa
+  // bosh burish ko'rsatmasi (server 'turn' challenge'i uchun).
+  const gateText =
+    gateStatus === 'connecting'
+      ? t('faceConnecting')
+      : gateStatus === 'no_face'
+        ? t('faceSearching')
+        : gateStatus === 'too_small'
+          ? t('faceCloser')
+          : gateStatus === 'off_center'
+            ? t('faceCenter')
+            : gateStatus === 'multiple'
+              ? t('faceMultiple')
+              : gateStatus === 'too_dark'
+                ? t('faceTooDark')
+                : gateStatus === 'spoof_suspected'
+                  ? t('errLivenessSpoof')
+                  : gateStatus === 'hold_long'
+                    ? t('faceBlinkHint')
+                    : gateStatus === 'triggered'
+                      ? t('scanVerifying')
+                      : t('faceHold');
+
   const statusText =
     scanState === 'starting'
       ? t('scanStarting')
@@ -453,7 +719,9 @@ export default function CheckScreen(): React.ReactElement {
         ? t('scanVerifying')
         : scanState === 'retry'
           ? lastHintRef.current || t('scanRetry')
-          : t('scanLooking');
+          : legacyMode
+            ? t('scanChallenge')
+            : gateText;
 
   const showTip = loopRef.current.attempts >= TIP_AFTER_ATTEMPTS && scanState !== 'success';
 
@@ -526,22 +794,49 @@ export default function CheckScreen(): React.ReactElement {
       {phase === 'camera' ? (
         cameraPermission?.granted ? (
           <View style={styles.flex}>
-            <CameraView
-              ref={cameraRef}
-              style={StyleSheet.absoluteFill}
-              facing="front"
-              onCameraReady={handleCameraReady}
-            />
+            {LiveFaceCamera ? (
+              // LIVE: on-device ML Kit — yuz kvadrat bilan kuzatiladi, faqat
+              // jonlilik dalili (blink) bilan suratga olinadi.
+              <LiveFaceCamera
+                paused={liveBusy}
+                onStatus={handleGateStatus}
+                onBurst={handleLiveBurst}
+              />
+            ) : !wsFailed && locationRef.current ? (
+              // WS: kadrlar real-time serverga oqadi — yuz kvadrati va jonlilik
+              // darvozasi server tomonda; native modul kerak emas.
+              <WsFaceCamera
+                location={locationRef.current}
+                type={type}
+                onStatus={handleWsStatus}
+                onFatalStart={handleWsFatalStart}
+                onFailure={handleWsFailure}
+                onSuccess={handleWsSuccess}
+                onUnavailable={handleWsUnavailable}
+              />
+            ) : (
+              // LEGACY: oddiy burst + bosh burish challenge (WS ham imkonsiz)
+              <CameraView
+                ref={cameraRef}
+                style={StyleSheet.absoluteFill}
+                facing="front"
+                onCameraReady={handleCameraReady}
+              />
+            )}
 
             {/* Qorong'i chetlar */}
             <View pointerEvents="none" style={styles.maskTop} />
             <View pointerEvents="none" style={styles.maskBottom} />
 
-            {/* Oval ramka + verify glow */}
-            <View pointerEvents="none" style={styles.ovalWrap}>
-              <Animated.View style={[styles.ovalGlow, { borderColor: colors.primary }, glowStyle]} />
-              <View style={[styles.oval, { borderColor: ovalColor }]} />
-            </View>
+            {/* Oval ramka + glow — faqat legacy rejimda (live/ws'da yuz kvadrati bor) */}
+            {legacyMode ? (
+              <View pointerEvents="none" style={styles.ovalWrap}>
+                <Animated.View
+                  style={[styles.ovalGlow, { borderColor: colors.primary }, glowStyle]}
+                />
+                <View style={[styles.oval, { borderColor: ovalColor }]} />
+              </View>
+            ) : null}
 
             {/* Jonli status matni */}
             <Animated.View entering={FadeIn.delay(150)} style={styles.statusWrap}>
@@ -554,22 +849,24 @@ export default function CheckScreen(): React.ReactElement {
               {showTip ? <Text style={styles.tipText}>{t('scanTipLight')}</Text> : null}
             </Animated.View>
 
-            {/* Qo'lda olish (ixtiyoriy fallback) */}
-            <View style={[styles.captureWrap, { paddingBottom: insets.bottom + 24 }]}>
-              <Text style={styles.captureHint}>{t('manualCapture')}</Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={manualCapture}
-                disabled={scanState === 'verifying'}
-                style={({ pressed }) => [
-                  styles.captureBtn,
-                  scanState === 'verifying' && styles.captureDisabled,
-                  pressed && styles.capturePressed,
-                ]}
-              >
-                <View style={styles.captureInner} />
-              </Pressable>
-            </View>
+            {/* Qo'lda olish — faqat legacy rejimda (live/ws avto ishlaydi) */}
+            {legacyMode ? (
+              <View style={[styles.captureWrap, { paddingBottom: insets.bottom + 24 }]}>
+                <Text style={styles.captureHint}>{t('manualCapture')}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={manualCapture}
+                  disabled={scanState === 'verifying'}
+                  style={({ pressed }) => [
+                    styles.captureBtn,
+                    scanState === 'verifying' && styles.captureDisabled,
+                    pressed && styles.capturePressed,
+                  ]}
+                >
+                  <View style={styles.captureInner} />
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : (
           <View style={styles.centerBox}>

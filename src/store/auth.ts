@@ -28,18 +28,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const access = await tokenStorage.getAccess();
       const refresh = await tokenStorage.getRefresh();
       if (!access && !refresh) {
+        console.log('[boot] token yo\'q -> guest (login ekraniga)');
         set({ status: 'guest' });
         return;
       }
+      console.log('[boot] token bor -> /auth/me so\'ralmoqda...');
       const me = await api<MeResponse>('/auth/me');
+      console.log('[boot] /auth/me OK -> authed:', me.user?.username ?? me.user?.id);
       set({
         status: 'authed',
         user: me.user,
         employee: me.employee ?? null,
         company: me.company ?? null,
       });
-    } catch {
+    } catch (e) {
       // Token yaroqsiz yoki tarmoq yo'q — login ekraniga
+      console.log('[boot] bootstrap xato -> guest:', e instanceof Error ? e.message : e);
       set({ status: 'guest', user: null, employee: null, company: null });
     }
   },

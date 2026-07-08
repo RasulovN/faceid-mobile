@@ -42,6 +42,13 @@
         }
       ],
       [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Davomatni yuz orqali tasdiqlash uchun kamera kerak.",
+          "enableMicrophonePermission": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Filial hududida ekaningizni tekshirish uchun joylashuv kerak."

@@ -18,6 +18,24 @@ export const API_URL: string = normalizeApiUrl(
   process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000',
 );
 
+// Diagnostika: Metro terminalда bundle'ga qaysi manzil inline bo'lganini ko'rsatadi.
+// Eski IP chiqsa — .env yangilangach `npx expo start -c` qilinmagan (cache eski).
+console.log('[boot] API_URL =', API_URL);
+
+/** Har bir so'rov uchun maksimal kutish (ms) — o'lik IP'da abadiy osilib qolmaslik uchun. */
+const FETCH_TIMEOUT_MS = 12_000;
+
+/** fetch + timeout: javob kelmasa AbortController orqali bekor qilinadi. */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Envelope & xatolar
 // ---------------------------------------------------------------------------
@@ -95,7 +113,7 @@ async function tryRefresh(): Promise<boolean> {
       try {
         const refreshToken = await tokenStorage.getRefresh();
         if (!refreshToken) return false;
-        const res = await fetch(`${API_URL}/auth/refresh`, {
+        const res = await fetchWithTimeout(`${API_URL}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
@@ -158,7 +176,7 @@ async function rawRequest<T>(
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithTimeout(url, {
       method,
       headers,
       body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),

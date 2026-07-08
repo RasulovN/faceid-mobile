@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '@/store/auth';
@@ -56,8 +56,10 @@ function AuthGate({ children }: { children: React.ReactNode }): React.ReactEleme
     if (status === 'loading') return;
     const inAuthScreens = segments[0] === 'login' || segments[0] === 'forgot-password';
     if (status === 'guest' && !inAuthScreens) {
+      console.log('[boot] guest -> /login ga yo\'naltirilmoqda');
       router.replace('/login');
     } else if (status === 'authed' && inAuthScreens) {
+      console.log('[boot] authed -> / (asosiy) ga yo\'naltirilmoqda');
       router.replace('/');
     }
   }, [status, segments, router]);
@@ -112,6 +114,9 @@ function ThemedRoot(): React.ReactElement {
   );
 }
 
+/** Fontlar qandaydir sabab bilan osilib qolsa ham splash abadiy qotib qolmasin. */
+const SPLASH_TIMEOUT_MS = 4000;
+
 export default function RootLayout(): React.ReactElement | null {
   const [fontsLoaded, fontError] = useFonts({
     Manrope_400Regular,
@@ -120,20 +125,36 @@ export default function RootLayout(): React.ReactElement | null {
     Manrope_700Bold,
     Manrope_800ExtraBold,
   });
+  const [timedOut, setTimedOut] = useState(false);
 
-  const onLayout = useCallback(() => {
-    if (fontsLoaded || fontError) {
-      void SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
+  // Xavfsizlik taymeri: fontlar yuklanmasa ham belgilangan vaqtdan keyin davom etamiz.
+  useEffect(() => {
+    const id = setTimeout(() => setTimedOut(true), SPLASH_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, []);
 
-  // Fontlar yuklanmasa (yoki xato bo'lsa ham davom etamiz) — splash ushlab turiladi.
-  if (!fontsLoaded && !fontError) {
+  const ready = fontsLoaded || !!fontError || timedOut;
+
+  // Ilova chizishga tayyor bo'lishi bilanoq splash'ni yopamiz.
+  // onLayout'ga bog'lanmaymiz — u ba'zi holatlarda ishlamay, splash qotib qolardi.
+  useEffect(() => {
+    if (!ready) return;
+    console.log(
+      '[boot] splash yopilmoqda (fontsLoaded=%s, fontError=%s, timedOut=%s)',
+      fontsLoaded,
+      !!fontError,
+      timedOut,
+    );
+    // Splash allaqachon yopilgan bo'lsa hideAsync xatosini e'tiborsiz qoldiramiz.
+    SplashScreen.hideAsync().catch(() => undefined);
+  }, [ready, fontsLoaded, fontError, timedOut]);
+
+  if (!ready) {
     return null;
   }
 
   return (
-    <GestureHandlerRootView style={styles.root} onLayout={onLayout}>
+    <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
         <ThemedRoot />
       </QueryClientProvider>

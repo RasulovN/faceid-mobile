@@ -101,8 +101,10 @@ ochilganda tiklanadi.
   `uz-Cyrl.ts` (krill), `ru.ts` (rus), `en.ts` (ingliz). Har biri
   `satisfies Record<keyof typeof uz, string>` bilan majburlanadi — biror kalit
   yetishmasa yoki ortiqcha bo'lsa `tsc` xato beradi.
-- `t(key, vars?)` global `currentLocale` bo'yicha ishlaydi. `setLocale` settings
-  store bilan sinxronlanadi; **`app/_layout.tsx`** root `useSettingsStore(s => s.locale)`
+- `t(key, vars?)` global `currentLocale` bo'yicha ishlaydi. `currentLocale`
+  settings store'ga subscription orqali sinxron turadi (`src/i18n/index.ts`;
+  settings.ts i18n'ni faqat type sifatida import qiladi — require cycle yo'q);
+  **`app/_layout.tsx`** root `useSettingsStore(s => s.locale)`
   ni kuzatadi — til o'zgarganda butun daraxt qayta render bo'lib barcha `t()`
   chaqiruvlari yangilanadi.
 
