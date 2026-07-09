@@ -3,59 +3,90 @@
     "name": "FaceID Davomat",
     "slug": "faceid-davomat",
     "version": "1.0.0",
+    "description": "FaceID Davomat — xodimlar uchun yuz orqali davomat: keldi/ketdi belgilash, jonlilik (liveness) tekshiruvi, filial geolokatsiyasi, davomat tarixi va bildirishnomalar.",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": "faceid",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "backgroundColor": "#FAFAFA",
-    "splash": {
-      "backgroundColor": "#4F46E5",
-      "resizeMode": "contain"
-    },
+    "primaryColor": "#4F46E5",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "uz.ats.faceid",
       "infoPlist": {
-        "NSCameraUsageDescription": "Davomatni yuz orqali tasdiqlash uchun kamera kerak.",
-        "NSLocationWhenInUseUsageDescription": "Filial hududida ekaningizni tekshirish uchun joylashuv kerak."
+        "NSCameraUsageDescription": "Kamera ish joyiga kelganingizni yuzingiz orqali tasdiqlash (davomat belgilash) uchun ishlatiladi. Suratlar faqat shu maqsadda ish beruvchingiz tizimiga yuboriladi.",
+        "NSLocationWhenInUseUsageDescription": "Joylashuv davomat belgilash paytida filial hududida ekaningizni tekshirish uchun ishlatiladi. Ilova fonda joylashuvni kuzatmaydi.",
+        "NSMicrophoneUsageDescription": "Mikrofon ishlatilmaydi; bu ruxsat kamera kutubxonasi talabi uchun ko'rsatilgan va ilova ovoz yozmaydi.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
       "package": "uz.ats.faceid",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4F46E5"
+      },
       "softwareKeyboardLayoutMode": "pan",
+      "edgeToEdgeEnabled": true,
+      "allowBackup": false,
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "POST_NOTIFICATIONS",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "plugins": [
       "expo-router",
       "expo-dev-client",
       "expo-secure-store",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#4F46E5"
+        }
+      ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Davomatni selfie orqali tasdiqlash uchun kamera kerak."
+          "cameraPermission": "Kamera davomatni yuz orqali tasdiqlash uchun ishlatiladi.",
+          "microphonePermission": "Mikrofon ishlatilmaydi.",
+          "recordAudioAndroid": false
         }
       ],
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Davomatni yuz orqali tasdiqlash uchun kamera kerak.",
+          "cameraPermissionText": "Kamera davomatni yuz orqali tasdiqlash uchun ishlatiladi.",
           "enableMicrophonePermission": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Filial hududida ekaningizni tekshirish uchun joylashuv kerak."
+          "locationWhenInUsePermission": "Joylashuv davomat paytida filial hududida ekaningizni tekshirish uchun ishlatiladi.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#4F46E5"
         }
       ],
       "expo-font"

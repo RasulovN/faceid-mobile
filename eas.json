@@ -9,19 +9,43 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend.timepro.uz",
+        "EXPO_PUBLIC_YANDEX_MAPS_API_KEY": "92688ac7-af1a-4e61-8646-1d9cc6cde872"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend.timepro.uz",
+        "EXPO_PUBLIC_YANDEX_MAPS_API_KEY": "92688ac7-af1a-4e61-8646-1d9cc6cde872"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
+      },
+      "ios": {
+        "appleId": "APPLE_ID_EMAILINGIZ",
+        "ascAppId": "APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "APPLE_TEAM_ID"
+      }
+    }
   }
 }
