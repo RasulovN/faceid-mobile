@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TurboModuleRegistry, View } from 'react-native';
 import { useT } from '@/i18n';
 import { type ColorScheme, fonts, radius, useTheme } from '@/theme';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -36,6 +36,14 @@ let initialized = false;
 function loadYamap(): YamapModule | null {
   if (cached !== undefined) return cached;
   try {
+    // MUHIM: yamap-plus bosh importi barcha TurboModule'larni getEnforcing bilan
+    // yuklanishdayoq talab qiladi — native modul binary'da bo'lmasa (eski
+    // dev-client) Invariant Violation otadi. Shuning uchun require'dan OLDIN
+    // otmaydigan .get() bilan tekshiramiz: yo'q bo'lsa jim fallback.
+    if (!TurboModuleRegistry.get('RTNYamapModule')) {
+      cached = null;
+      return cached;
+    }
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('react-native-yamap-plus') as YamapModule;
     const apiKey = process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY;
