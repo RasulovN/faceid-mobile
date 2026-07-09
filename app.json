@@ -89,6 +89,13 @@
           "backgroundColor": "#4F46E5"
         }
       ],
+      [
+        "react-native-yamap-plus",
+        {
+          "android_useYandexMapKitLite": true,
+          "ios_useYandexMapKitLite": true
+        }
+      ],
       "expo-font"
     ],
     "experiments": {

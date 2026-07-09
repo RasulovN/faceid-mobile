@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="#4F46E5">
+  <!-- FaceID Davomat glifi: skan qavslari + avatar (placeholder — haqiqiy logo bilan almashtiriladi) -->
+  <g id="glyph">
+    <!-- burchak qavslari -->
+    <rect x="179" y="179" width="174" height="57" rx="26"/>
+    <rect x="179" y="179" width="57" height="174" rx="26"/>
+    <rect x="671" y="179" width="174" height="57" rx="26"/>
+    <rect x="788" y="179" width="57" height="174" rx="26"/>
+    <rect x="179" y="788" width="174" height="57" rx="26"/>
+    <rect x="179" y="671" width="57" height="174" rx="26"/>
+    <rect x="671" y="788" width="174" height="57" rx="26"/>
+    <rect x="788" y="671" width="57" height="174" rx="26"/>
+    <!-- avatar: bosh + yelka -->
+    <circle cx="512" cy="445" r="104"/>
+    <rect x="353" y="594" width="318" height="148" rx="72"/>
+  </g>
+</svg>

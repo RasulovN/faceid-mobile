@@ -6,12 +6,15 @@ import { type ColorScheme, fonts, radius, useTheme } from '@/theme';
 import { ErrorBoundary } from './ErrorBoundary';
 
 /**
- * react-native-yamap — NATIVE modul (Yandex MapKit), Expo Go'da ISHLAMAYDI.
+ * react-native-yamap-plus — NATIVE modul (Yandex MapKit), Expo Go'da ISHLAMAYDI.
+ * (Eski react-native-yamap RN 0.81/Kotlin 2.1 bilan kompilyatsiya bo'lmay qolgani
+ * uchun faol fork'ka o'tildi — v6 New Architecture'ni qo'llaydi.)
  * Shu sabab:
  *   - lazy require + try/catch (modul yo'q bo'lsa import qulatmaydi),
  *   - render ErrorBoundary ichida (native view topilmasa fallback),
  *   - fallback karta: "Xarita dev-client talab qiladi".
- * API kaliti runtime'da YaMap.init() orqali beriladi (EXPO_PUBLIC_YANDEX_MAPS_API_KEY).
+ * API kaliti runtime'da YamapInstance.init() orqali beriladi
+ * (EXPO_PUBLIC_YANDEX_MAPS_API_KEY).
  */
 
 interface YamapPoint {
@@ -20,11 +23,11 @@ interface YamapPoint {
 }
 
 interface YamapModule {
-  default: React.ComponentType<Record<string, unknown>> & {
-    init: (apiKey: string) => Promise<void>;
-  };
+  /** Yamap komponenti (default eksport) */
+  default: React.ComponentType<Record<string, unknown>>;
   Marker: React.ComponentType<Record<string, unknown>>;
   Circle: React.ComponentType<Record<string, unknown>>;
+  YamapInstance: { init: (apiKey: string) => Promise<void> };
 }
 
 let cached: YamapModule | null | undefined;
@@ -34,11 +37,11 @@ function loadYamap(): YamapModule | null {
   if (cached !== undefined) return cached;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require('react-native-yamap') as YamapModule;
+    const mod = require('react-native-yamap-plus') as YamapModule;
     const apiKey = process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY;
     if (!initialized && apiKey) {
-      // init xatosi (masalan Expo Go'da native modul yo'q) fallback'ga olib boradi
-      void mod.default.init(apiKey).catch(() => undefined);
+      // init xatosi (masalan eski dev-client'da native modul yo'q) fallback'ga olib boradi
+      void mod.YamapInstance.init(apiKey).catch(() => undefined);
       initialized = true;
     }
     cached = mod;

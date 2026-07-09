@@ -44,7 +44,7 @@
     "react-native-vision-camera-face-detector": "1.10.2",
     "react-native-worklets": "0.5.1",
     "react-native-worklets-core": "1.6.3",
-    "react-native-yamap": "^4.8.3",
+    "react-native-yamap-plus": "^6.9.1",
     "socket.io-client": "^4.8.3",
     "zod": "^3.23.8",
     "zustand": "^5.0.0"

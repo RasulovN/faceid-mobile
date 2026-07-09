@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Ilova ikonkasi uslubidagi belgi: indigo plitka + oq glif -->
+  <rect width="1024" height="1024" rx="230" fill="#4F46E5"/>
+  <g fill="#FFFFFF" transform="translate(112.64 112.64) scale(0.78)">
+    <rect x="179" y="179" width="174" height="57" rx="26"/>
+    <rect x="179" y="179" width="57" height="174" rx="26"/>
+    <rect x="671" y="179" width="174" height="57" rx="26"/>
+    <rect x="788" y="179" width="57" height="174" rx="26"/>
+    <rect x="179" y="788" width="174" height="57" rx="26"/>
+    <rect x="179" y="671" width="57" height="174" rx="26"/>
+    <rect x="671" y="788" width="174" height="57" rx="26"/>
+    <rect x="788" y="671" width="57" height="174" rx="26"/>
+    <circle cx="512" cy="445" r="104"/>
+    <rect x="353" y="594" width="318" height="148" rx="72"/>
+  </g>
+</svg>

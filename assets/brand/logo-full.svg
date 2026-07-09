@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1760 512">
+  <!-- Gorizontal lockup: belgi + so'z belgisi (wordmark) -->
+  <rect width="512" height="512" rx="115" fill="#4F46E5"/>
+  <g fill="#FFFFFF" transform="translate(56.32 56.32) scale(0.39)">
+    <rect x="179" y="179" width="174" height="57" rx="26"/>
+    <rect x="179" y="179" width="57" height="174" rx="26"/>
+    <rect x="671" y="179" width="174" height="57" rx="26"/>
+    <rect x="788" y="179" width="57" height="174" rx="26"/>
+    <rect x="179" y="788" width="174" height="57" rx="26"/>
+    <rect x="179" y="671" width="57" height="174" rx="26"/>
+    <rect x="671" y="788" width="174" height="57" rx="26"/>
+    <rect x="788" y="671" width="57" height="174" rx="26"/>
+    <circle cx="512" cy="445" r="104"/>
+    <rect x="353" y="594" width="318" height="148" rx="72"/>
+  </g>
+  <text x="592" y="238" font-family="Manrope, Inter, -apple-system, 'Segoe UI', sans-serif"
+        font-size="190" font-weight="800" fill="#18181B">FaceID</text>
+  <text x="592" y="428" font-family="Manrope, Inter, -apple-system, 'Segoe UI', sans-serif"
+        font-size="150" font-weight="500" fill="#4F46E5">Davomat</text>
+</svg>

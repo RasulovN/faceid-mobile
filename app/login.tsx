@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { t, useT } from '@/i18n';
@@ -68,9 +69,7 @@ export default function LoginScreen(): React.ReactElement {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.logoWrap}>
-          <View style={styles.logo}>
-            <Ionicons name="scan-outline" size={36} color={colors.white} />
-          </View>
+          <BrandLogo size={84} tileColor={colors.primary} style={styles.logo} />
           <Text style={styles.appName}>{t('appName')}</Text>
         </View>
 
@@ -144,12 +143,6 @@ const createStyles = (colors: ColorScheme) => StyleSheet.create({
     marginBottom: 28,
   },
   logo: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 12,
   },
   appName: {
