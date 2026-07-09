@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "FaceID Davomat",
-    "slug": "faceid-mobile",
+    "slug": "faceid-davomat",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "faceid",
@@ -14,20 +14,24 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "net.atssystems.faceid",
+      "bundleIdentifier": "uz.ats.faceid",
       "infoPlist": {
-        "NSCameraUsageDescription": "Davomatni selfie orqali tasdiqlash uchun kamera kerak.",
+        "NSCameraUsageDescription": "Davomatni yuz orqali tasdiqlash uchun kamera kerak.",
         "NSLocationWhenInUseUsageDescription": "Filial hududida ekaningizni tekshirish uchun joylashuv kerak."
       }
     },
     "android": {
-      "package": "net.atssystems.faceid",
+      "package": "uz.ats.faceid",
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [
@@ -58,6 +62,13 @@
     ],
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "13aa8e68-7fd8-46e5-9ee1-6d7c19e82ef1"
+      }
+    },
+    "owner": "rasulovdev"
   }
 }

@@ -6,7 +6,7 @@ const ACCESS_KEY = 'faceid_access_token';
 const REFRESH_KEY = 'faceid_refresh_token';
 
 /**
- * EXPO_PUBLIC_API_URL faqat domen bo'lsa (masalan http://192.168.1.42:3000)
+ * EXPO_PUBLIC_API_URL faqat domen bo'lsa (masalan http://192.168.1.42:3000) https://backend.timepro.uz
  * oxiriga /api/v1 avtomatik qo'shiladi; to'liq berilsa o'zgarishsiz qoladi.
  */
 function normalizeApiUrl(raw: string): string {
@@ -15,7 +15,7 @@ function normalizeApiUrl(raw: string): string {
 }
 
 export const API_URL: string = normalizeApiUrl(
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000',
+  process.env.EXPO_PUBLIC_API_URL ?? 'https://backend.timepro.uz',
 );
 
 // Diagnostika: Metro terminalда bundle'ga qaysi manzil inline bo'lganini ko'rsatadi.
