@@ -69,7 +69,7 @@ export default function LoginScreen(): React.ReactElement {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.logoWrap}>
-          <BrandLogo size={84} tileColor={colors.primary} style={styles.logo} />
+          <BrandLogo size={84} style={styles.logo} />
           <Text style={styles.appName}>{t('appName')}</Text>
         </View>
 

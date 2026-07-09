@@ -23,15 +23,16 @@ Yangi logodan quyidagi PNG'larni eksport qilib, **xuddi shu nomlar bilan** almas
 | `splash-icon.png` | 512×512+ | Glif, shaffof fon (fon rangi app.json'da: #4F46E5) |
 | `notification-icon.png` | 96×96 | FAQAT oq + shaffoflik (Android talabi, rangli bo'lsa oq kvadrat ko'rinadi) |
 
-## 3. Ilova ICHIDAGI logo (login ekrani va h.k.)
+## 3. Ilova ICHIDAGI logo (login ekrani va h.k.) — PNG
 
-`src/components/BrandLogo.tsx` — glif sof React Native View'lar bilan chizilgan
-(react-native-svg O'RNATILMAGAN — native modul qo'shish dev-client rebuild talab qiladi).
-Haqiqiy logoga o'tishda ikki yo'l bor:
+`src/components/BrandLogo.tsx` shu papkadagi PNG'larni `<Image>` bilan ko'rsatadi
+(RN uchun eng optimal usul; react-native-svg o'rnatilmagan va kerak ham emas).
+Haqiqiy logoga o'tishda quyidagi 6 PNG'ni xuddi shu nomlar bilan almashtiring —
+kod o'zgarmaydi:
 
-- **Oson:** logoni PNG qilib (masalan `assets/brand/logo.png` @2x/@3x bilan) `<Image>`
-  orqali ko'rsatish — `BrandLogo` ichini `<Image source={require(...)} />` ga almashtirasiz.
-- **Sifatli (vektor):** `npx expo install react-native-svg` + dev-client REBUILD, so'ng
-  SVG'ni `react-native-svg` komponentiga aylantirish (transformer yoki qo'lda).
+| Fayl | O'lcham | Nima |
+|---|---|---|
+| `logo-tile.png` / `@2x` / `@3x` | 128 / 256 / 384 | Yumaloq plitkali to'liq rangli logo (login) |
+| `logo-glyph.png` / `@2x` / `@3x` | 128 / 256 / 384 | FAQAT OQ glif, shaffof fon — `tintColor` bilan bo'yaladi (`variant="plain"`) |
 
 Ranglar: indigo `#4F46E5` (docs/DESIGN_SYSTEM.md dagi asosiy accent).
