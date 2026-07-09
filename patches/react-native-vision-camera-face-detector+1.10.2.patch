@@ -1,0 +1,82 @@
+diff --git a/node_modules/react-native-vision-camera-face-detector/lib/commonjs/Camera.js b/node_modules/react-native-vision-camera-face-detector/lib/commonjs/Camera.js
+index e8934c1..682fbbb 100644
+--- a/node_modules/react-native-vision-camera-face-detector/lib/commonjs/Camera.js
++++ b/node_modules/react-native-vision-camera-face-detector/lib/commonjs/Camera.js
+@@ -128,13 +128,13 @@ function Camera({
+   /**
+    * Skia frame processor
+    */
+-  const skiaFrameProcessor = (0, _reactNativeVisionCamera.useSkiaFrameProcessor)(frame => {
++  const skiaFrameProcessor = skiaActions ? (0, _reactNativeVisionCamera.useSkiaFrameProcessor)(frame => {
+     'worklet';
+ 
+     frame.render();
+     skiaActions(JSON.parse(faces.value), frame);
+     runAsync(frame);
+-  }, [runOnAsyncContext, skiaActions]);
++  }, [runOnAsyncContext, skiaActions]) : undefined;
+ 
+   /**
+    * Default frame processor
+diff --git a/node_modules/react-native-vision-camera-face-detector/lib/module/Camera.js b/node_modules/react-native-vision-camera-face-detector/lib/module/Camera.js
+index 5e0b853..a0e832d 100644
+--- a/node_modules/react-native-vision-camera-face-detector/lib/module/Camera.js
++++ b/node_modules/react-native-vision-camera-face-detector/lib/module/Camera.js
+@@ -127,13 +127,13 @@ export function Camera({
+   /**
+    * Skia frame processor
+    */
+-  const skiaFrameProcessor = useSkiaFrameProcessor(frame => {
++  const skiaFrameProcessor = skiaActions ? useSkiaFrameProcessor(frame => {
+     'worklet';
+ 
+     frame.render();
+     skiaActions(JSON.parse(faces.value), frame);
+     runAsync(frame);
+-  }, [runOnAsyncContext, skiaActions]);
++  }, [runOnAsyncContext, skiaActions]) : undefined;
+ 
+   /**
+    * Default frame processor
+diff --git a/node_modules/react-native-vision-camera-face-detector/src/Camera.tsx b/node_modules/react-native-vision-camera-face-detector/src/Camera.tsx
+index 44ce80c..51089ce 100644
+--- a/node_modules/react-native-vision-camera-face-detector/src/Camera.tsx
++++ b/node_modules/react-native-vision-camera-face-detector/src/Camera.tsx
+@@ -192,18 +192,26 @@ export function Camera( {
+ 
+   /**
+    * Skia frame processor
++   *
++   * PATCH (faceid): faqat skiaActions berilganda yaratiladi — aks holda
++   * @shopify/react-native-skia o'rnatilmagan buildda hook chaqiruvining o'zi
++   * OptionalDependencyNotInstalledError otadi. skiaActions mavjudligi mount
++   * davomida o'zgarmaydi, shuning uchun shartli hook xavfsiz.
+    */
+-  const skiaFrameProcessor = useSkiaFrameProcessor( ( frame ) => {
+-    'worklet'
+-    frame.render()
+-    skiaActions!( JSON.parse(
+-      faces.value
+-    ), frame )
+-    runAsync( frame )
+-  }, [
+-    runOnAsyncContext,
+-    skiaActions
+-  ] )
++  const skiaFrameProcessor = skiaActions
++    // eslint-disable-next-line react-hooks/rules-of-hooks
++    ? useSkiaFrameProcessor( ( frame ) => {
++      'worklet'
++      frame.render()
++      skiaActions!( JSON.parse(
++        faces.value
++      ), frame )
++      runAsync( frame )
++    }, [
++      runOnAsyncContext,
++      skiaActions
++    ] )
++    : undefined
+ 
+   /**
+    * Default frame processor

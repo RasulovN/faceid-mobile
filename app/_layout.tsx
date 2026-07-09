@@ -13,9 +13,13 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { flushPendingErrorLogs, initErrorReporting } from '@/lib/error-reporter';
 import { useAuthStore } from '@/store/auth';
 import { useSettingsStore } from '@/store/settings';
 import { useTheme } from '@/theme';
+
+// Fatal JS xatolar superadmin panelga yuborilsin (imkon qadar erta o'rnatiladi).
+initErrorReporting();
 
 // Fontlar yuklanmaguncha splash ekranini ushlab turamiz.
 void SplashScreen.preventAutoHideAsync();
@@ -41,6 +45,8 @@ function AuthGate({ children }: { children: React.ReactNode }): React.ReactEleme
 
   useEffect(() => {
     void useAuthStore.getState().bootstrap();
+    // Oldingi sessiyada yuborilmay qolgan xato loglarini jo'natamiz
+    void flushPendingErrorLogs();
   }, []);
 
   // PUSH-NOTIFICATION SKELETON: login'dan keyin push tokenni ro'yxatdan o'tkazish.
