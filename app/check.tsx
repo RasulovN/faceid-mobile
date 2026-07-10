@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,8 +23,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { SuccessCheck } from '@/components/SuccessCheck';
 import { getCurrentLocation, type LiveLocation } from '@/hooks/useLiveLocation';
-import { type Locale, useT } from '@/i18n';
+import { useT } from '@/i18n';
 import { api, ApiError } from '@/lib/api';
+import { announce } from '@/lib/voice';
 import { checkErrorMessage } from '@/lib/errors';
 import { fmtTime } from '@/lib/format';
 import { formatDistance, haversineMeters } from '@/lib/geo';
@@ -51,6 +51,26 @@ try {
   }
 } catch {
   LiveFaceCamera = null;
+}
+
+// MediaPipe Face Landmarker plugini BOR buildda — kioskdagi kabi blendshape
+// (eyeBlinkLeft/Right) blink darvozasi: LIVE (MLKit) dan ham ishonchliroq,
+// shuning uchun eng yuqori ustuvor rejim. Plugin yo'q eski buildda null bo'lib
+// qoladi va ekran MLKit LIVE oqimiga tushadi. Statik import EMAS: native modul
+// yo'q buildda ilova yiqilmasligi uchun runtime require.
+let MpFaceCamera: React.ComponentType<LiveFaceCameraProps> | null = null;
+try {
+  if (isVisionCameraAvailable()) {
+    const faceLandmarks =
+      require('@/lib/faceLandmarks') as typeof import('@/lib/faceLandmarks');
+    if (faceLandmarks.isFaceLandmarksAvailable()) {
+      MpFaceCamera = (
+        require('@/components/MpFaceCamera') as typeof import('@/components/MpFaceCamera')
+      ).MpFaceCamera;
+    }
+  }
+} catch {
+  MpFaceCamera = null;
 }
 
 /** Yuqori bosqich holati (geofence/kamera/natija). */
@@ -95,31 +115,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Locale'ni TTS til kodiga moslaydi (uz-Cyrl uchun 'uz' fallback). */
-function speechLang(locale: Locale): string {
-  switch (locale) {
-    case 'ru':
-      return 'ru';
-    case 'en':
-      return 'en';
-    default:
-      return 'uz';
-  }
-}
-
-/**
- * Ovozli e'lon — faqat terminal (bir martalik) holatlarda chaqiriladi.
- * Qurilma TTS'ni qo'llab-quvvatlamasa jimgina o'tadi (try/catch).
- */
-function announce(text: string, locale: Locale): void {
-  try {
-    Speech.stop();
-    Speech.speak(text, { language: speechLang(locale) });
-  } catch {
-    /* ovoz mavjud emas — jim */
-  }
-}
-
 export default function CheckScreen(): React.ReactElement {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -143,10 +138,30 @@ export default function CheckScreen(): React.ReactElement {
   const [farDistance, setFarDistance] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successTime, setSuccessTime] = useState<string>('');
-  // Rejimlar: live (on-device ML Kit) > ws (server-driven real-time) > legacy.
-  const liveMode = LiveFaceCamera !== null;
+  // Rejimlar: mp (MediaPipe blendshape) > live (on-device ML Kit) > ws
+  // (server-driven real-time) > legacy. mpFailed/liveFailed — modul bor-u,
+  // lekin runtime'da ishlamadi (front kamera yo'q / model yuklanmagan).
+  const [mpFailed, setMpFailed] = useState(false);
+  const [liveFailed, setLiveFailed] = useState(false);
+  const mpMode = MpFaceCamera !== null && !mpFailed;
+  const liveMode = mpMode || (LiveFaceCamera !== null && !liveFailed);
   const [wsFailed, setWsFailed] = useState(false);
   const legacyMode = !liveMode && wsFailed;
+
+  // Diagnostika: qaysi rejim ishlayotganini Metro konsolida ko'rsatamiz.
+  // MEDIAPIPE ko'rinmasa — build eski (native plugin yo'q), yangi
+  // dev-client/EAS build kerak (README: "Yuz tekshiruvi rejimlari").
+  useEffect(() => {
+    if (!__DEV__) return;
+    const mode = mpMode
+      ? 'MEDIAPIPE (478 mesh, blendshape blink)'
+      : LiveFaceCamera !== null && !liveFailed
+        ? 'LIVE (MLKit, 133 kontur)'
+        : !wsFailed
+          ? 'WS (server-driven)'
+          : 'LEGACY (HTTP burst)';
+    console.log(`[check] yuz tekshiruvi rejimi: ${mode}`);
+  }, [mpMode, liveFailed, wsFailed]);
   const [gateStatus, setGateStatus] = useState<string>(liveMode ? 'no_face' : 'connecting');
   const [liveBusy, setLiveBusy] = useState(false);
 
@@ -231,10 +246,10 @@ export default function CheckScreen(): React.ReactElement {
     // Oxirgi sabab aniq bo'lsa mos xabar + ovoz beramiz.
     if (loop.lastCode === 'FACE_NOT_RECOGNIZED') {
       setErrorMessage(tt('faceNotYours'));
-      announce(tt('voiceNotRecognized'), localeRef.current);
+      announce('notRecognized', tt('voiceNotRecognized'), localeRef.current);
     } else if (loop.lastCode === 'LIVENESS_FAILED') {
       setErrorMessage(tt('errLivenessSpoof'));
-      announce(tt('voiceLivenessFailed'), localeRef.current);
+      announce('livenessFailed', tt('voiceLivenessFailed'), localeRef.current);
     } else {
       setErrorMessage(lastHintRef.current || tt('verifyTimeout'));
     }
@@ -260,6 +275,7 @@ export default function CheckScreen(): React.ReactElement {
       setSuccessTime(fmtTime(timestampIso ?? new Date().toISOString()));
       await queryClient.invalidateQueries({ queryKey: ['attendance'] });
       announce(
+        typeRef.current === 'CHECK_IN' ? 'checkIn' : 'checkOut',
         typeRef.current === 'CHECK_IN' ? tt('voiceCheckIn') : tt('voiceCheckOut'),
         localeRef.current,
       );
@@ -293,7 +309,7 @@ export default function CheckScreen(): React.ReactElement {
       if (code === 'SUBSCRIPTION_EXPIRED') {
         stopLoop();
         setErrorMessage(checkErrorMessage(err));
-        announce(tt('voiceSubscriptionExpired'), localeRef.current);
+        announce('subscriptionExpired', tt('voiceSubscriptionExpired'), localeRef.current);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setPhaseBoth('error');
         return;
@@ -342,7 +358,7 @@ export default function CheckScreen(): React.ReactElement {
         if (loop.notRecognizedStreak >= NOT_RECOGNIZED_STREAK_LIMIT) {
           stopLoop();
           setErrorMessage(tt('faceNotYours'));
-          announce(tt('voiceNotRecognized'), localeRef.current);
+          announce('notRecognized', tt('voiceNotRecognized'), localeRef.current);
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           setPhaseBoth('error');
           return;
@@ -364,7 +380,7 @@ export default function CheckScreen(): React.ReactElement {
         if (loop.livenessStreak >= LIVENESS_STREAK_LIMIT) {
           stopLoop();
           setErrorMessage(tt('errLivenessSpoof'));
-          announce(tt('voiceLivenessFailed'), localeRef.current);
+          announce('livenessFailed', tt('voiceLivenessFailed'), localeRef.current);
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           setPhaseBoth('error');
           return;
@@ -498,20 +514,39 @@ export default function CheckScreen(): React.ReactElement {
     [enforceLimits, submitFrames],
   );
 
-  const handleGateStatus = useCallback((status: GateStatus) => {
-    setGateStatus(status);
+  // 'spoof_suspected' (rasm/ekran gumoni) — bir sessiyada BIR MARTA ovoz +
+  // haptic bilan e'lon qilinadi; darvoza ochiq qoladi (haqiqiy odam blink
+  // qilsa davom etadi), lekin foydalanuvchi sababni darhol eshitadi.
+  const spoofAnnouncedRef = useRef(false);
+  const noteSpoof = useCallback((status: string) => {
+    if (status !== 'spoof_suspected' || spoofAnnouncedRef.current) return;
+    spoofAnnouncedRef.current = true;
+    announce('livenessFailed', tRef.current('voiceLivenessFailed'), localeRef.current);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   }, []);
+
+  const handleGateStatus = useCallback(
+    (status: GateStatus) => {
+      setGateStatus(status);
+      noteSpoof(status);
+    },
+    [noteSpoof],
+  );
 
   // --- WS (server-driven real-time) rejim handlerlari ---
 
-  const handleWsStatus = useCallback((state: string) => {
-    setGateStatus(state === 'verifying' ? 'triggered' : state);
-    if (state === 'verifying') {
-      setScanState('verifying');
-    } else {
-      setScanState((s) => (s === 'verifying' ? 'scanning' : s));
-    }
-  }, []);
+  const handleWsStatus = useCallback(
+    (state: string) => {
+      setGateStatus(state === 'verifying' ? 'triggered' : state);
+      noteSpoof(state);
+      if (state === 'verifying') {
+        setScanState('verifying');
+      } else {
+        setScanState((s) => (s === 'verifying' ? 'scanning' : s));
+      }
+    },
+    [noteSpoof],
+  );
 
   const handleWsSuccess = useCallback(
     (timestampIso?: string) => {
@@ -592,6 +627,7 @@ export default function CheckScreen(): React.ReactElement {
     loop.lastCode = '';
     loop.startedAt = Date.now();
     lastHintRef.current = '';
+    spoofAnnouncedRef.current = false;
     setScanState('scanning');
     // Live/WS rejimlarda birinchi urinishni darvoza/server boshlaydi
     if (legacyMode) tickRef.current();
@@ -794,13 +830,23 @@ export default function CheckScreen(): React.ReactElement {
       {phase === 'camera' ? (
         cameraPermission?.granted ? (
           <View style={styles.flex}>
-            {LiveFaceCamera ? (
+            {MpFaceCamera && !mpFailed ? (
+              // MEDIAPIPE: kioskdagi kabi 478-nuqtali mesh + blendshape blink
+              // darvozasi — ko'z holati maxsus o'qitilgan modeldan o'lchanadi.
+              <MpFaceCamera
+                paused={liveBusy}
+                onStatus={handleGateStatus}
+                onBurst={handleLiveBurst}
+                onUnavailable={() => setMpFailed(true)}
+              />
+            ) : LiveFaceCamera && !liveFailed ? (
               // LIVE: on-device ML Kit — yuz kvadrat bilan kuzatiladi, faqat
               // jonlilik dalili (blink) bilan suratga olinadi.
               <LiveFaceCamera
                 paused={liveBusy}
                 onStatus={handleGateStatus}
                 onBurst={handleLiveBurst}
+                onUnavailable={() => setLiveFailed(true)}
               />
             ) : !wsFailed && locationRef.current ? (
               // WS: kadrlar real-time serverga oqadi — yuz kvadrati va jonlilik

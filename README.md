@@ -60,12 +60,35 @@ Keyingi ishga tushirishlar (native o'zgarmagan bo'lsa):
 npm start                    # expo start --dev-client
 ```
 
+### Yuz tekshiruvi rejimlari (check ekrani)
+
+`/check` ekrani buildda nima borligiga qarab eng kuchli rejimni avtomatik tanlaydi
+(pastga qarab yumshoq fallback):
+
+| # | Rejim | Texnologiya | Jonlilik darvozasi |
+|---|---|---|---|
+| 1 | **MEDIAPIPE** | Google MediaPipe Face Landmarker (native plugin, `modules/vision-camera-face-landmarks`) | Blendshape `eyeBlinkLeft/Right` blink — kiosk bilan bir xil |
+| 2 | LIVE | ML Kit (`react-native-vision-camera-face-detector`) | `eyeOpenProbability` blink |
+| 3 | WS | expo-camera + Socket.IO (server-driven) | Server tomonda |
+| 4 | LEGACY | expo-camera HTTP burst | Server `turn` challenge |
+
+**MediaPipe rejimi uchun:**
+
+- Model (`face_landmarker.task`, ~3.6 MB) `postinstall`da avtomatik yuklab olinadi
+  (`npm run setup-models` qo'lda). Android assets va iOS bundle'ga joylanadi.
+- Native plugin qo'shilgani uchun **yangi dev-client/EAS build MAJBURIY** —
+  eski buildda ilova avtomatik LIVE (ML Kit) rejimiga tushadi, hech narsa buzilmaydi.
+- MediaPipe **faqat yuz geometriyasi/jonlilik** uchun (kioskdagi kabi on-device);
+  yuzni BAZA bilan solishtirish (identifikatsiya) baribir serverdagi
+  `face-service` (InsightFace/ArcFace) da qiladi.
+
 ### Yandex MapKit (yamap) konfiguratsiyasi
 
 - API kalit **runtime'da** beriladi: `src/components/BranchMap.tsx` →
   `YaMap.init(EXPO_PUBLIC_YANDEX_MAPS_API_KEY)`. `app.json`ga kalit yozish shart emas.
 - Kalit olish: https://developer.tech.yandex.ru/services → *MapKit Mobile SDK*.
-- `app.json`da `newArchEnabled: false` — yamap eski arxitekturada barqaror ishlaydi.
+- `app.json`da `newArchEnabled: true` (Expo SDK 54 standarti; `react-native-yamap-plus`
+  yangi arxitekturada ishlaydi).
 - Xarita komponenti to'liq izolyatsiya qilingan (lazy require + try/catch + ErrorBoundary):
   yamap yo'q muhitda (masalan Expo Go) app qulamaydi, o'rniga
   *"Xarita dev-client talab qiladi"* fallback kartasi chiqadi.

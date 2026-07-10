@@ -30,7 +30,8 @@ import type { AttendanceType } from '@/types/api';
 export interface WsFaceCameraProps {
   location: LiveLocation;
   type: AttendanceType;
-  /** Darvoza holati: connecting | no_face | too_small | off_center | multiple | hold | hold_long | verifying */
+  /** Darvoza holati: connecting | no_face | too_small | off_center | multiple |
+   *  too_dark | hold | hold_long | spoof_suspected | verifying */
   onStatus: (state: string) => void;
   /** Sessiya boshlanishi rad etildi (geofence/obuna/debounce/...) */
   onFatalStart: (err: ApiError) => void;
@@ -76,9 +77,14 @@ const IDLE_BREATH_MS = 1200;
 /** Shuncha ketma-ket "yuz yo'q" kadrdan keyin sekin rejimga o'tiladi. */
 const IDLE_AFTER_NO_FACE = 4;
 const NET_FAIL_LIMIT = 3;
-/** Oqim surati uchun uzun tomon chegaralari (piksel) — KICHIK = TEZ. */
+/** Oqim surati uchun uzun tomon chegaralari (piksel) — KICHIK = TEZ.
+ * Server /analyze det_size=320 da ishlaydi, ArcFace esa 112px kropda —
+ * 640px uzun tomon aniqlikka ta'sir qilmay capture+encode+upload'ni
+ * sezilarli tezlashtiradi (1024 ga nisbatan ~2.5x kichik payload). */
 const MIN_PICTURE_LONG_SIDE = 320;
-const MAX_PICTURE_LONG_SIDE = 1024;
+const MAX_PICTURE_LONG_SIDE = 640;
+/** 640 ichida mos o'lcham topilmasa shu chegaragacha kengaytiriladi. */
+const FALLBACK_PICTURE_LONG_SIDE = 1024;
 
 /**
  * Mavjud surat o'lchamlaridan oqim uchun ENG MOSINI tanlaydi:
@@ -91,23 +97,26 @@ function pickStreamPictureSize(
   sizes: string[],
   screenRatio: number, // min(w,h)/max(w,h), masalan ~0.46
 ): string | undefined {
-  let best: { size: string; aspectDiff: number; longSide: number } | null = null;
-  for (const size of sizes) {
-    const [a, b] = size.split('x').map(Number);
-    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) continue;
-    const longSide = Math.max(a, b);
-    if (longSide < MIN_PICTURE_LONG_SIDE || longSide > MAX_PICTURE_LONG_SIDE) continue;
-    const ratio = Math.min(a, b) / Math.max(a, b);
-    const aspectDiff = Math.abs(ratio - screenRatio);
-    if (
-      !best ||
-      aspectDiff < best.aspectDiff - 0.02 ||
-      (Math.abs(aspectDiff - best.aspectDiff) <= 0.02 && longSide < best.longSide)
-    ) {
-      best = { size, aspectDiff, longSide };
+  const pick = (maxLongSide: number): string | undefined => {
+    let best: { size: string; aspectDiff: number; longSide: number } | null = null;
+    for (const size of sizes) {
+      const [a, b] = size.split('x').map(Number);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) continue;
+      const longSide = Math.max(a, b);
+      if (longSide < MIN_PICTURE_LONG_SIDE || longSide > maxLongSide) continue;
+      const ratio = Math.min(a, b) / Math.max(a, b);
+      const aspectDiff = Math.abs(ratio - screenRatio);
+      if (
+        !best ||
+        aspectDiff < best.aspectDiff - 0.02 ||
+        (Math.abs(aspectDiff - best.aspectDiff) <= 0.02 && longSide < best.longSide)
+      ) {
+        best = { size, aspectDiff, longSide };
+      }
     }
-  }
-  return best?.size;
+    return best?.size;
+  };
+  return pick(MAX_PICTURE_LONG_SIDE) ?? pick(FALLBACK_PICTURE_LONG_SIDE);
 }
 
 const BOX_COLORS = {
@@ -115,6 +124,7 @@ const BOX_COLORS = {
   adjust: '#F59E0B',
   ready: '#6366F1',
   verifying: '#10B981',
+  spoof: '#F43F5E', // insoniylik aniqlanmadi (rasm/ekran gumoni)
 } as const;
 
 /** Bitta capture uchun maksimal kutish — undan oshsa kadr tashlanadi. */
@@ -287,12 +297,13 @@ export function WsFaceCamera({
         if (dt > 0 && dt < 800) {
           dur = Math.min(400, Math.max(100, dt));
           const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
-          const maxShift = w * 0.4;
-          // 1.4x kuchaytirilgan bashorat — harakatga "yetib olish" tezroq
-          tx = x + clamp((x - prev.x) * 1.4, maxShift);
-          ty = y + clamp((y - prev.y) * 1.4, maxShift);
-          tw = w + clamp((w - prev.w) * 1.2, w * 0.2);
-          th = h + clamp((h - prev.h) * 1.2, h * 0.2);
+          const maxShift = w * 0.3;
+          // Mo''tadil bashorat (1.2x): harakatga yetib oladi, lekin yuz
+          // to'xtaganda ramka/nuqtalar yuzdan "o'tib ketmaydi" (overshoot).
+          tx = x + clamp((x - prev.x) * 1.2, maxShift);
+          ty = y + clamp((y - prev.y) * 1.2, maxShift);
+          tw = w + clamp((w - prev.w) * 1.1, w * 0.15);
+          th = h + clamp((h - prev.h) * 1.1, h * 0.15);
         }
       }
 
@@ -304,9 +315,13 @@ export function WsFaceCamera({
       boxH.value = withTiming(th, cfg);
       boxOpacity.value = withTiming(1, { duration: 150 });
 
-      // 106 mesh nuqtasi — bbox'ga NISBATAN foizda (kvadrat konteyner ichida
+      // Mesh nuqtalari — bbox'ga NISBATAN foizda (kvadrat konteyner ichida
       // render qilinadi, shuning uchun kvadrat qayoqqa silliq yurса nuqtalar
       // ham birga yuradi; gorizontal oyna aksi shu yerda qo'llanadi).
+      // BARCHA 106 nuqta chiziladi (avval har 3-tasi ~36 ta edi — zichlik 3x).
+      // Interpolyatsiya QILINMAYDI: 106-massiv guruhlari (jag', qosh, ko'z...)
+      // tekis kelgani uchun guruh chegarasida oraliq nuqta yuzdan tashqarida
+      // "sayoq" bo'lib qolardi. Ack ~1-3/s keladi, re-render narxi arzon.
       if (ack.landmarks && ack.landmarks.length > 0 && box.width > 0 && box.height > 0) {
         setDots(
           ack.landmarks.map(([nx, ny]) => ({
@@ -324,7 +339,9 @@ export function WsFaceCamera({
           ? BOX_COLORS.ready
           : state === 'verifying'
             ? BOX_COLORS.verifying
-            : BOX_COLORS.adjust;
+            : state === 'spoof_suspected'
+              ? BOX_COLORS.spoof
+              : BOX_COLORS.adjust;
     },
     [screenW, screenH, boxX, boxY, boxW, boxH, boxOpacity, boxColor],
   );
@@ -711,12 +728,13 @@ const styles = StyleSheet.create({
   },
   meshDot: {
     position: 'absolute',
-    width: 3,
-    height: 3,
-    marginLeft: -1.5,
-    marginTop: -1.5,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(165,180,252,0.95)', // indigo-300 — aniq ko'rinadi
+    // Kiosk canvas nuqtalari ko'rinishi: mayda oq nuqtalar zich to'r bo'ladi
+    width: 2.5,
+    height: 2.5,
+    marginLeft: -1.25,
+    marginTop: -1.25,
+    borderRadius: 1.25,
+    backgroundColor: 'rgba(255,255,255,0.85)',
   },
   hud: {
     position: 'absolute',

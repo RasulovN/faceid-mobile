@@ -1,0 +1,19 @@
+{
+  "name": "vision-camera-face-landmarks",
+  "version": "1.0.0",
+  "description": "Google MediaPipe Face Landmarker frame-processor plugin (react-native-vision-camera) — 478 nuqtali mesh + blendshape blink skorlari",
+  "main": "index.js",
+  "private": true,
+  "files": [
+    "index.js",
+    "android",
+    "ios",
+    "VisionCameraFaceLandmarks.podspec",
+    "!android/build",
+    "!ios/build"
+  ],
+  "peerDependencies": {
+    "react-native": "*",
+    "react-native-vision-camera": "*"
+  }
+}

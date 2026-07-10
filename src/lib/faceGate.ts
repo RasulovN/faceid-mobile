@@ -5,8 +5,17 @@
  * yaw, ko'z ochiqligi) shu holat mashinasidan o'tadi. Suratga olish FAQAT:
  *   1) bitta yuz kadrda yetarli katta va markazda BARQAROR turganda, VA
  *   2) JONLILIK dalili kuzatilganda: tabiiy ko'z yumib-ochish (blink —
- *      eyeOpen yuqori→past tushishi) YOKI boshning tabiiy burilishi (yaw
- *      diapazoni) — statik rasm/relyef ikkalasini ham qila olmaydi.
+ *      eyeOpen yuqori→past tushishi). Statik rasm/ekran blink qila olmaydi.
+ *
+ * Bosh burilishi ('turn') FAQAT ko'z ma'lumoti umuman kelmaydigan qurilmalarda
+ * fallback sifatida qoladi: tekis rasmni chapga-o'ngga burish ML Kit yaw'ini
+ * o'zgartira olardi — ko'z ma'lumoti bor joyda turn o'chirilgan, rasm shu
+ * yo'l bilan darvozadan o'tmaydi.
+ *
+ * Yuz barqaror turib UZOQ VAQT blink kuzatilmasa (jonsiz yuz — qog'oz rasm,
+ * telefon ekrani) darvoza 'spoof_suspected' holatini qaytaradi — UI
+ * "insoniylik aniqlanmadi" deb ko'rsatadi. Haqiqiy odam baribir blink qiladi
+ * va darvoza o'sha zahoti ochiladi.
  *
  * Trigger 'blink' ko'z YUMILGAN paytda otiladi — kamera darhol suratga olsa,
  * yopiq-ko'z kadri serverdagi EAR blink tekshiruviga dalil bo'ladi.
@@ -35,8 +44,9 @@ export type GateStatus =
   | 'multiple'
   | 'too_small'
   | 'off_center'
-  | 'hold' // barqaror — jonlilik dalili (blink/burilish) kutilmoqda
+  | 'hold' // barqaror — jonlilik dalili (blink) kutilmoqda
   | 'hold_long' // uzoq kutildi — foydalanuvchiga "ko'z yumib oching" maslahati
+  | 'spoof_suspected' // juda uzoq blink yo'q — rasm/ekran gumoni
   | 'triggered'; // dalil kuzatildi — suratga olish vaqti
 
 export type GateTrigger = 'blink' | 'turn' | null;
@@ -57,12 +67,18 @@ export interface GateConfig {
   /** Blink: ochiq/yopiq ko'z chegaralari */
   eyeOpenHigh: number;
   eyeOpenLow: number;
-  /** Turn: barqaror oynada yaw diapazoni (gradus) */
+  /** Turn-fallback: barqaror oynada yaw diapazoni (gradus) */
   yawRangeDeg: number;
+  /** Turn-fallback: kamida shuncha yaw namunasi yig'ilgan bo'lsin */
+  turnMinSamples: number;
+  /** Turn-fallback: namunalar kamida shuncha ms oraliqni qamrasin */
+  turnMinSpanMs: number;
   /** Yaw/ko'z tarixi oynasi, ms */
   windowMs: number;
   /** Shuncha ms blink kuzatilmasa 'hold_long' (maslahat ko'rsatiladi) */
   longHoldMs: number;
+  /** Shuncha ms blink kuzatilmasa 'spoof_suspected' (rasm/ekran gumoni) */
+  spoofAfterMs: number;
 }
 
 export const DEFAULT_GATE_CONFIG: GateConfig = {
@@ -73,8 +89,11 @@ export const DEFAULT_GATE_CONFIG: GateConfig = {
   eyeOpenHigh: 0.6,
   eyeOpenLow: 0.35,
   yawRangeDeg: 14,
+  turnMinSamples: 5,
+  turnMinSpanMs: 500,
   windowMs: 3500,
   longHoldMs: 4500,
+  spoofAfterMs: 8000,
 };
 
 interface HistoryEntry {
@@ -149,9 +168,10 @@ export class FaceGate {
 
     // --- Jonlilik dalillari ---
 
-    // 1) BLINK: oynada avval OCHIQ ko'z bo'lgan, hozirgi kadr YOPIQ.
-    //    Trigger yopiq paytda otiladi — darhol suratga olinsa serverga
-    //    yopiq-ko'z kadri (EAR dalili) tushadi.
+    // 1) BLINK (asosiy trigger): oynada avval OCHIQ ko'z bo'lgan, hozirgi
+    //    kadr YOPIQ. Trigger yopiq paytda otiladi — darhol suratga olinsa
+    //    serverga yopiq-ko'z kadri (EAR dalili) tushadi. Statik rasm/ekran
+    //    buni qila olmaydi.
     if (sample.eyeOpen >= 0 && sample.eyeOpen <= cfg.eyeOpenLow) {
       const sawOpen = this.history.some(
         (h) => h.eyeOpen >= cfg.eyeOpenHigh && h.timestamp < sample.timestamp,
@@ -162,11 +182,32 @@ export class FaceGate {
       }
     }
 
-    // 2) TURN: barqaror oynada bosh tabiiy burilgan (yaw diapazoni).
-    const yaws = this.history.map((h) => h.yaw).filter((y) => Number.isFinite(y));
-    if (yaws.length >= 3 && Math.max(...yaws) - Math.min(...yaws) >= cfg.yawRangeDeg) {
-      this.locked = true;
-      return { status: 'triggered', trigger: 'turn' };
+    // 2) TURN (faqat fallback): ko'z ochiqlik ma'lumoti UMUMAN kelmaydigan
+    //    qurilmalarda bosh burilishi qabul qilinadi. Ko'z ma'lumoti bor joyda
+    //    turn O'CHIRILGAN — tekis rasmni burish yaw'ni o'zgartirib darvozadan
+    //    o'tib ketmasin. Qat'iy talablar: yetarli namuna + vaqt oralig'i.
+    const hasEyeData = this.history.some((h) => h.eyeOpen >= 0);
+    if (!hasEyeData) {
+      const yawEntries = this.history.filter((h) => Number.isFinite(h.yaw));
+      if (yawEntries.length >= cfg.turnMinSamples) {
+        const yaws = yawEntries.map((h) => h.yaw);
+        const spanMs =
+          yawEntries[yawEntries.length - 1].timestamp - yawEntries[0].timestamp;
+        if (
+          spanMs >= cfg.turnMinSpanMs &&
+          Math.max(...yaws) - Math.min(...yaws) >= cfg.yawRangeDeg
+        ) {
+          this.locked = true;
+          return { status: 'triggered', trigger: 'turn' };
+        }
+      }
+    }
+
+    // Ko'z ma'lumoti BOR, lekin juda uzoq blink kuzatilmadi — jonsiz yuz
+    // (qog'oz rasm / telefon ekrani) gumoni. Haqiqiy odam blink qilishi
+    // bilan yuqoridagi trigger baribir ochiladi.
+    if (hasEyeData && stableFor >= cfg.spoofAfterMs) {
+      return { status: 'spoof_suspected', trigger: null };
     }
 
     return {

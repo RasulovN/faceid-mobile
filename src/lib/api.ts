@@ -14,8 +14,16 @@ function normalizeApiUrl(raw: string): string {
   return /\/api\/v\d+$/.test(base) ? base : `${base}/api/v1`;
 }
 
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL;
+if (!rawApiUrl) {
+  // .env'da EXPO_PUBLIC_API_URL belgilanmagan — jim noto'g'ri URL bilan
+  // ishlashdan ko'ra aniq xabar bilan darhol yiqilamiz.
+  throw new Error('EXPO_PUBLIC_API_URL .env faylida belgilanmagan');
+}
+
 export const API_URL: string = normalizeApiUrl(
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://backend.timepro.uz',
+  rawApiUrl,
+  // process.env.EXPO_PUBLIC_API_URL ?? 'https://backend.timepro.uz',
 );
 
 // Diagnostika: Metro terminalда bundle'ga qaysi manzil inline bo'lganini ko'rsatadi.

@@ -4,9 +4,14 @@ dist/
 web-build/
 expo-env.d.ts.orig
 
-# Native papkalar (prebuild bilan generatsiya qilinadi)
-android/
-ios/
+# Native papkalar (prebuild bilan generatsiya qilinadi) — FAQAT ildizdagi;
+# modules/*/android va modules/*/ios lokal plugin kodi repoda TURISHI kerak
+/android/
+/ios/
+
+# MediaPipe modeli — postinstall (scripts/setup-face-landmarker.mjs) yuklab oladi
+modules/vision-camera-face-landmarks/android/src/main/assets/*.task
+modules/vision-camera-face-landmarks/ios/assets/*.task
 
 # Env
 .env
