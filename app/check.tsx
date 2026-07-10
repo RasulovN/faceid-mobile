@@ -25,6 +25,7 @@ import { SuccessCheck } from '@/components/SuccessCheck';
 import { getCurrentLocation, type LiveLocation } from '@/hooks/useLiveLocation';
 import { useT } from '@/i18n';
 import { api, ApiError } from '@/lib/api';
+import { shrinkFrames } from '@/lib/frameShrink';
 import { announce } from '@/lib/voice';
 import { checkErrorMessage } from '@/lib/errors';
 import { fmtTime } from '@/lib/format';
@@ -420,8 +421,12 @@ export default function CheckScreen(): React.ReactElement {
       }
       try {
         setScanState('verifying');
+        // TEZLIK: kadrlar yuklashdan oldin 640px ga kichraytiriladi (~10x kam
+        // trafik) — "tekshirilmoqda" kutishining asosiy qismi yuklash edi.
+        // Eski buildda (modul yo'q) kadr o'zgarishsiz ketadi.
+        const uploadUris = await shrinkFrames(frameUris);
         const form = new FormData();
-        frameUris.forEach((uri, i) => {
+        uploadUris.forEach((uri, i) => {
           form.append('frames', {
             uri,
             name: `frame${i}.jpg`,
@@ -437,6 +442,9 @@ export default function CheckScreen(): React.ReactElement {
         const res = await api<MobileCheckResponse>('/attendance/mobile/check', {
           method: 'POST',
           formData: form,
+          // Sekin uplink'da katta yuklama 12s default'dan oshishi mumkin —
+          // uzilib QAYTA yuklashdan (2x sekin) ko'ra kutgan tezroq.
+          timeoutMs: 30_000,
         });
         if (loop.cancelled) return;
         await handleCheckSuccess(res.event?.timestamp);
@@ -479,7 +487,9 @@ export default function CheckScreen(): React.ReactElement {
           return;
         }
         const photo = await camera.takePictureAsync({
-          quality: 0.5,
+          // Legacy'da rasm TO'LIQ sensor o'lchamida chiqadi — past sifat +
+          // submitFrames'dagi 640px resize yuklamani kichik tutadi.
+          quality: 0.35,
           skipProcessing: true,
           shutterSound: false,
         });

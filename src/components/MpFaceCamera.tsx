@@ -47,8 +47,10 @@ const DEVICE_WAIT_MS = 1500;
 
 const BURST_SIZE = 3;
 const BURST_GAP_MS = 220;
-/** Snapshot JPEG sifati — server 112px kropda ishlaydi, 80 yetarli */
-const SNAPSHOT_QUALITY = 80;
+/** Snapshot JPEG sifati — server 112px kropda ishlaydi; snapshot ekran
+ * o'lchamida (~1080p) chiqadi, 60 sifat yuklamani ~2x kichraytiradi
+ * (yangi buildda submitFrames baribir 640px ga resize qiladi). */
+const SNAPSHOT_QUALITY = 60;
 /** MediaPipe tahlil chastotasi — kioskga yaqin silliq kuzatuv; sekin
  * qurilmada inference o'zi chastotani tabiiy cheklaydi (kadr tushib qoladi). */
 const TARGET_FPS = 30;

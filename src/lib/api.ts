@@ -34,9 +34,13 @@ console.log('[boot] API_URL =', API_URL);
 const FETCH_TIMEOUT_MS = 12_000;
 
 /** fetch + timeout: javob kelmasa AbortController orqali bekor qilinadi. */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = FETCH_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -153,6 +157,12 @@ export interface RequestOptions {
   /** Bearer token qo'shish (default: true) */
   auth?: boolean;
   query?: Record<string, string | number | boolean | undefined>;
+  /**
+   * Shu so'rov uchun maxsus timeout (ms). Default 12s — lekin katta multipart
+   * yuklamalar (masalan, davomat burst kadrlari) sekin uplink'da undan uzoq
+   * ketishi mumkin: uzilib qayta boshlashdan ko'ra kutgan tezroq.
+   */
+  timeoutMs?: number;
 }
 
 interface ApiResult<T> {
@@ -165,7 +175,7 @@ async function rawRequest<T>(
   opts: RequestOptions,
   isRetry: boolean,
 ): Promise<ApiResult<T>> {
-  const { method = 'GET', body, formData, auth = true, query } = opts;
+  const { method = 'GET', body, formData, auth = true, query, timeoutMs } = opts;
 
   let url = `${API_URL}${path}`;
   if (query) {
@@ -184,11 +194,15 @@ async function rawRequest<T>(
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(url, {
-      method,
-      headers,
-      body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
-    });
+    res = await fetchWithTimeout(
+      url,
+      {
+        method,
+        headers,
+        body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
+      },
+      timeoutMs,
+    );
   } catch {
     throw new ApiError('NETWORK_ERROR', t('errNetwork'), 0);
   }
