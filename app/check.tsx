@@ -100,7 +100,9 @@ interface LoopState {
 // Har bir urinish endi BURST: bir necha kadr ketma-ket olinib bitta so'rovda
 // yuboriladi — server jonlilikni (passiv anti-spoof + bosh burilishi) shu
 // ketma-ketlik bo'yicha tekshiradi. Shu sabab urinish soni kam, vaqt ko'proq.
-const BURST_FRAMES = 4; // bitta urinishdagi kadrlar soni
+// Legacy'da darvoza yo'q — kadrda yuz bo'lmasligi mumkin; 4 kadr yuboriladi,
+// server 3 tasida yuz topsa yetadi (bitta yaroqsiz kadr kechiriladi).
+const BURST_FRAMES = 4;
 const BURST_FRAME_GAP_MS = 550; // kadrlar orasidagi pauza (bosh burilishga ulgursin)
 const MAX_ATTEMPTS = 6;
 const MAX_DURATION_MS = 60_000;

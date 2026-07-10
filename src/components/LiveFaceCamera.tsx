@@ -45,8 +45,13 @@ export interface LiveFaceCameraProps {
 /** Front kamera ro'yxatda paydo bo'lishini shuncha kutamiz (ms). */
 const DEVICE_WAIT_MS = 1500;
 
-const BURST_SIZE = 3;
-const BURST_GAP_MS = 220;
+/** 2 kadr = minimal to'liq burst: 1-kadr blink paytida (yopiq ko'z — EAR
+ * dalili), 2-kadr ~300ms keyin (ochiq ko'z). Server burst chegarasi kadr
+ * soniga moslashadi (min_valid_frames = min(3, len)) — izchillik, passiv
+ * anti-spoof va blink-challenge qatlamlari TO'LIQ saqlanadi, lekin capture,
+ * yuklash va server ishi ~33% kamayadi (kiosk tezligiga yaqin). */
+const BURST_SIZE = 2;
+const BURST_GAP_MS = 300;
 /** Snapshot JPEG sifati — server 112px kropda ishlaydi; snapshot ekran
  * o'lchamida (~1080p) chiqadi, 60 sifat yuklamani ~2x kichraytiradi
  * (yangi buildda submitFrames baribir 640px ga resize qiladi). */
