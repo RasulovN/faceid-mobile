@@ -60,11 +60,12 @@ function AuthGate({ children }: { children: React.ReactNode }): React.ReactEleme
 
   useEffect(() => {
     if (status === 'loading') return;
-    const inAuthScreens = segments[0] === 'login' || segments[0] === 'forgot-password';
-    if (status === 'guest' && !inAuthScreens) {
+    // forgot-password authed holatda ham ochilishi mumkin (parolni almashtirishdan)
+    const inGuestScreens = segments[0] === 'login' || segments[0] === 'forgot-password';
+    if (status === 'guest' && !inGuestScreens) {
       console.log('[boot] guest -> /login ga yo\'naltirilmoqda');
       router.replace('/login');
-    } else if (status === 'authed' && inAuthScreens) {
+    } else if (status === 'authed' && segments[0] === 'login') {
       console.log('[boot] authed -> / (asosiy) ga yo\'naltirilmoqda');
       router.replace('/');
     }
@@ -106,6 +107,7 @@ function ThemedRoot(): React.ReactElement {
           <Stack.Screen name="login" />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="change-password" />
+          <Stack.Screen name="edit-profile" />
           <Stack.Screen
             name="check"
             options={{

@@ -350,6 +350,12 @@ export default function ProfileScreen(): React.ReactElement {
         <GroupLabel label={t('accountGroupTitle')} />
         <Card style={styles.groupCard}>
           <SettingRow
+            icon="person-outline"
+            label={t('editProfile')}
+            onPress={() => router.push('/edit-profile')}
+          />
+          <View style={styles.rowDivider} />
+          <SettingRow
             icon="key-outline"
             label={t('changePassword')}
             onPress={() => router.push('/change-password')}
