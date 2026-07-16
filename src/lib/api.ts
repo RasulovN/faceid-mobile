@@ -207,20 +207,23 @@ async function rawRequest<T>(
     throw new ApiError('NETWORK_ERROR', t('errNetwork'), 0);
   }
 
-  let json: Envelope<T>;
-  try {
-    json = (await res.json()) as Envelope<T>;
-  } catch {
-    throw new ApiError('PARSE_ERROR', t('errGeneric'), res.status);
-  }
-
-  // 401 → bir marta refresh qilib qayta urinamiz
+  // 401 → bir marta refresh qilib qayta urinamiz. Bu tekshiruv JSON parse'dan
+  // OLDIN: envelope'siz 401 (masalan nginx/gateway yoki bo'sh javob) ham
+  // refresh/logout yo'liga tushsin — aks holda PARSE_ERROR bilan foydalanuvchi
+  // "buzuq login" holatida qolib ketardi.
   if (res.status === 401 && auth && !isRetry) {
     const refreshed = await tryRefresh();
     if (refreshed) return rawRequest<T>(path, opts, true);
     await tokenStorage.clear();
     onUnauthorized?.();
     throw new ApiError('UNAUTHORIZED', t('errUnauthorized'), 401);
+  }
+
+  let json: Envelope<T>;
+  try {
+    json = (await res.json()) as Envelope<T>;
+  } catch {
+    throw new ApiError('PARSE_ERROR', t('errGeneric'), res.status);
   }
 
   if (!json.success || json.error) {

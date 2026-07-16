@@ -185,6 +185,12 @@ export default function CheckScreen(): React.ReactElement {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickRef = useRef<() => void>(() => undefined);
+  // Devor-soati watchdog: MP/LIVE/WS rejimlarida gate hech trigger bermasa
+  // (foydalanuvchi ko'zini qisib qo'ymasa yoki doim spoof_suspected bo'lsa)
+  // burst yuborilmaydi → enforceLimits chaqirilmay, ekran cheksiz "camera"da
+  // qolardi. Bu taymer rejimga qaramay 60s da urinishni to'xtatadi.
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enforceLimitsRef = useRef<() => boolean>(() => false);
   const lastHintRef = useRef<string>('');
 
   // t va type'ni ref orqali eng so'nggi qiymatда ushlaymiz (sikl qayta yaratilmasin)
@@ -208,6 +214,10 @@ export default function CheckScreen(): React.ReactElement {
     if (hintTimerRef.current) {
       clearTimeout(hintTimerRef.current);
       hintTimerRef.current = null;
+    }
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
     }
   }, []);
 
@@ -260,6 +270,8 @@ export default function CheckScreen(): React.ReactElement {
     setPhaseBoth('error');
     return true;
   }, [stopLoop, setPhaseBoth]);
+  // Watchdog ref'i doim eng so'nggi enforceLimits'ga ishora qilsin
+  enforceLimitsRef.current = enforceLimits;
 
   /**
    * Muvaffaqiyatli tekshiruv: streak'lar reset, sikl to'xtaydi, success
@@ -641,6 +653,13 @@ export default function CheckScreen(): React.ReactElement {
     lastHintRef.current = '';
     spoofAnnouncedRef.current = false;
     setScanState('scanning');
+    // Rejimga qaramas devor-soati: gate/burst hech ishlamasa ham 60s dan keyin
+    // urinishni to'xtatib "verifyTimeout" chiqaradi (aks holda MP/LIVE/WS'da
+    // cheksiz "camera"da qolib ketishi mumkin edi). +1s — legacy tick o'z
+    // limitini birinchi bo'lib ishlatib ulgursin.
+    watchdogRef.current = setTimeout(() => {
+      if (!loopRef.current.cancelled) enforceLimitsRef.current();
+    }, MAX_DURATION_MS + 1000);
     // Live/WS rejimlarda birinchi urinishni darvoza/server boshlaydi
     if (legacyMode) tickRef.current();
   }, [legacyMode]);
