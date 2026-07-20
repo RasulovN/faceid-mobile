@@ -152,10 +152,14 @@ export function MpFaceCamera({
 }: MpFaceCameraProps): React.ReactElement | null {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const device = useCameraDevice('front');
-  // Tahlil oqimi 720p yetarli (MediaPipe ichkarida 192px'da ishlaydi);
-  // snapshot ham shu oqimdan olinadi — server 112px kropiga mo'l-ko'l.
+  // TEZLIK: tahlil oqimi 540p — MediaPipe ichkarida baribir ~192px' da ishlaydi,
+  // shuning uchun 720p'dan 540p'ga tushirish inference'ga TA'SIR QILMAYDI, lekin
+  // har kadrdagi YUV→bitmap konvertatsiyasi (piksel soni ~44% kam) va GPU yuklovi
+  // arzonlashadi — kadr chastotasi oshadi. Snapshot ham shu oqimdan (540p) olinadi
+  // va submitFrames baribir 640px ga keltiradi — server 112px kropiga yetarli.
+  // Aniqlik pasaysa (uzoqdan) 720p ga qaytaring.
   const format = useCameraFormat(device, [
-    { videoResolution: { width: 1280, height: 720 } },
+    { videoResolution: { width: 960, height: 540 } },
   ]);
   const plugin = useMemo(() => getFaceLandmarksPlugin(), []);
 

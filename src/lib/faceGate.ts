@@ -82,10 +82,18 @@ export interface GateConfig {
 }
 
 export const DEFAULT_GATE_CONFIG: GateConfig = {
-  minWidthRatio: 0.28,
+  // TEZLIK: kiosk yuzni 16%'dan qabul qiladi, mobil esa 28% talab qilardi —
+  // foydalanuvchi telefonni juda yaqin tutishi kerak bo'lib, "aniqlamayapti"
+  // hissi tug'ilardi. 22% — hali ham server kropiga yetarli, lekin qabul
+  // sezilarli tezlashadi (front kamera selfie masofasida yuz baribir katta).
+  minWidthRatio: 0.22,
   centerToleranceX: 0.22,
   centerToleranceY: 0.25,
-  stableMs: 600,
+  // TEZLIK: kioskda barqarorlik kutilmaydi (2 ochiq kadr → blink). Mobil 600ms
+  // majburiy kutardi — trigger kechikardi. 350ms hali ham qo'zg'almas poza
+  // talab qiladi (harakat bluri yo'q), lekin ~250ms tezroq otiladi. Jonlilik
+  // (blink) talabi TO'LIQ saqlanadi — bu asosiy anti-spoof qatlami.
+  stableMs: 350,
   eyeOpenHigh: 0.6,
   eyeOpenLow: 0.35,
   yawRangeDeg: 14,

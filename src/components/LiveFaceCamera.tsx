@@ -58,11 +58,13 @@ const BURST_GAP_MS = 300;
 const SNAPSHOT_QUALITY = 60;
 /** ML Kit natijalarini qabul qilish chastotasi (~30fps — silliq kuzatuv) */
 const DETECT_THROTTLE_MS = 33;
-/** ML Kit kontur nuqtalari soni: FACE(36) + qoshlar(20) + ko'zlar(32) +
- * lablar(38) + burun(5) + yonoqlar(2) = 133. Har guruh ichida qo'shni
- * nuqtalar orasiga oraliq nuqta qo'shilib zichlik ~2x oshiriladi (kiosk
- * mesh ko'rinishiga yaqin) — pool shu kengaytirilgan o'lchamda. */
-const MAX_MESH_DOTS = 260;
+/** ML Kit kontur nuqtalari: 133 ta bazaviy nuqta guruhlar ichida oraliq
+ * nuqta bilan zichlashtiriladi. TEZLIK: har nuqta alohida Animated.View bo'lib
+ * UI-thread'da har kadrda qayta hisoblanadi — zaif telefonda kuzatuvni
+ * sekinlashtiradi. Pool'ni 160 ga cheklaymiz (kontur baribir ~250 chiqishi
+ * mumkin, ortig'i kesiladi): overlay hisobi sezilarli kamayadi, zichlik hali
+ * ham to'r bo'lib ko'rinadi. */
+const MAX_MESH_DOTS = 160;
 /** Ramka ML Kit bbox'idan biroz TOR (kioskdagi kabi yuz kattaligiga mos —
  * detektor to'rtburchagi yuzdan kengroq ko'rinmasin) */
 const BOX_PAD_RATIO = -0.04;
