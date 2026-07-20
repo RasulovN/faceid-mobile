@@ -2,12 +2,12 @@ package com.visioncamerafacelandmarks
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.os.SystemClock
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
+import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.mrousavy.camera.frameprocessors.Frame
@@ -84,23 +84,36 @@ class VisionCameraFaceLandmarksPlugin(
       val imageProxy = frame.imageProxy
       val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-      // YUV kadr → ARGB bitmap (libyuv orqali, tez), keyin upright'ga burish.
-      // MediaPipe blendshape modeli taxminan tik yuz kutadi — burish shart.
-      var bitmap: Bitmap = imageProxy.toBitmap()
-      if (rotationDegrees != 0) {
-        val matrix = Matrix()
-        matrix.postRotate(rotationDegrees.toFloat())
-        bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, false)
-      }
-      out["width"] = bitmap.width
-      out["height"] = bitmap.height
+      // YUV kadr → ARGB bitmap (libyuv orqali, tez). Aylantirishni QO'LDA
+      // QILMAYMIZ: `Bitmap.createBitmap(...matrix...)` har kadrda to'liq
+      // (~720p, ~3.7MB) bitmap allocatsiya + piksel nusxa qilardi — GC pauza
+      // va CPU yuki, mobil sekinligning asosiy sababi. Buning o'rniga
+      // rotationDegrees'ni MediaPipe'ga uzatamiz: u burishni ichki (GPU)
+      // quvurida bepul bajaradi. iOS plugini ham xuddi shu yo'l bilan
+      // (MPImage orientation) ishlaydi — natija koordinata fazosi bir xil.
+      val bitmap: Bitmap = imageProxy.toBitmap()
+
+      // 90/270°'da upright kadr o'lchamlari almashadi (JS cover-fit uchun;
+      // landmark koordinatalari MediaPipe tomonidan upright fazoda qaytadi).
+      val rotated = rotationDegrees == 90 || rotationDegrees == 270
+      out["width"] = if (rotated) bitmap.height else bitmap.width
+      out["height"] = if (rotated) bitmap.width else bitmap.height
 
       // detectForVideo timestamp'lari qat'iy o'sib borishi shart
       var ts = SystemClock.uptimeMillis()
       if (ts <= lastTimestampMs) ts = lastTimestampMs + 1
       lastTimestampMs = ts
 
-      val result = detector.detectForVideo(BitmapImageBuilder(bitmap).build(), ts)
+      // rotationDegrees MediaPipe'ga preprocessing sifatida beriladi — natija
+      // upright (tik yuz) fazoda, blendshape modeli ham to'g'ri ishlaydi.
+      val imageProcessingOptions = ImageProcessingOptions.builder()
+        .setRotationDegrees(rotationDegrees)
+        .build()
+      val result = detector.detectForVideo(
+        BitmapImageBuilder(bitmap).build(),
+        imageProcessingOptions,
+        ts,
+      )
       val meshes = result.faceLandmarks()
       if (meshes.isNullOrEmpty() || meshes[0].isEmpty()) return out
 

@@ -59,12 +59,17 @@ const SNAPSHOT_QUALITY = 60;
 /** MediaPipe tahlil chastotasi — kioskga yaqin silliq kuzatuv; sekin
  * qurilmada inference o'zi chastotani tabiiy cheklaydi (kadr tushib qoladi). */
 const TARGET_FPS = 30;
-/** Native'dan har nechanchi mesh nuqtasi olinadi. 1 = BARCHA 478 nuqta —
- * kiosk overlay bilan bir xil zichlik. Juda zaif qurilmada UI oqimi
- * qiynalsa 2 ga ko'tarish mumkin (239 nuqta). */
-const LANDMARK_STEP = 1;
-/** Overlay nuqtalari pool o'lchami — MediaPipe meshdagi jami nuqta soni */
-const MAX_MESH_DOTS = 478;
+/** Native'dan har nechanchi mesh nuqtasi olinadi. 2 = har ikkinchi nuqta
+ * (239 ta) — TEZLIK uchun: har nuqta alohida Animated.View bo'lib, UI-thread'da
+ * har kadrda qayta hisoblanadi (kiosk esa bitta canvas'da chizadi). Mobil
+ * qurilma kiosk'dan zaifroq — nuqtani 2x kamaytirish bridge yuki, EMA va
+ * overlay hisobini yarmiga tushiradi; zichlik ko'zга deyarli bir xil.
+ * Kuchli qurilmada 1 ga tushirsa 478 ta (kioskdek) to'liq mesh bo'ladi. */
+const LANDMARK_STEP = 2;
+/** Overlay nuqtalari pool o'lchami — LANDMARK_STEP=2'da native yuboradigan
+ * nuqtalar soni (478 mesh / 2). LANDMARK_STEP'ni o'zgartirsa mos ravishda
+ * ceil(478 / LANDMARK_STEP) qilib yangilang. */
+const MAX_MESH_DOTS = 239;
 /** Nuqta EMA silliqlash: yangi o'lchov ulushi (LiveFaceCamera bilan bir xil) */
 const MESH_ALPHA = 0.6;
 /** Ramka kuzatuv animatsiyasi davomiyligi chegaralari (ms) */
